@@ -157,3 +157,6 @@ Thumbs.db
 .cache/
 .coverage
 htmlcov/
+# Old Git backups
+.git_old_backup/
+.git_wrong_parent_backup/
