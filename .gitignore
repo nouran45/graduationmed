@@ -1,0 +1,159 @@
+# ============================================================
+# Node / Next.js
+# ============================================================
+node_modules/
+frontend/node_modules/
+.next/
+frontend/.next/
+out/
+dist/
+frontend/out/
+frontend/dist/
+
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+
+# ============================================================
+# Environment files — NEVER commit secrets
+# ============================================================
+.env
+.env.*
+backend/.env
+frontend/.env.local
+
+# Allow example env files
+!.env.example
+!backend/.env.example
+!frontend/.env.example
+
+replacements.txt
+
+
+# ============================================================
+# Python / FastAPI
+# ============================================================
+__pycache__/
+backend/__pycache__/
+backend/**/__pycache__/
+
+*.py[cod]
+*.so
+*.egg
+*.egg-info/
+.eggs/
+*.dist-info/
+build/
+dist/
+
+.mypy_cache/
+.pytest_cache/
+.ipynb_checkpoints/
+*.ipynb_checkpoints/
+
+
+# ============================================================
+# Virtual environments
+# ============================================================
+venv/
+.venv/
+.venc/
+backend/venv/
+frontend/venv/
+env/
+ENV/
+env.bak/
+
+
+# ============================================================
+# Model files & ML weights — keep local, do not push
+# ============================================================
+
+# General model files
+*.pt
+*.pth
+*.bin
+*.pkl
+*.pickle
+*.joblib
+*.h5
+*.keras
+*.ckpt
+*.onnx
+*.tflite
+*.pb
+*.hdf5
+*.npz
+*.model
+pytorch_model.bin
+
+# Old model folders
+backend/vitweights/
+backend/cnnweights/
+backend/xgboostweights/
+
+# New Stage E fracture ensemble files
+backend/fracture_stageE/
+backend/ml_models/
+backend/**/stageE_effnet.keras
+backend/**/stageE_swint_final.pt
+backend/**/stageE_metadata.json
+
+
+# ============================================================
+# Archive files
+# ============================================================
+*.zip
+*.tar.gz
+*.tar
+*.rar
+*.7z
+
+
+# ============================================================
+# Database / data / logs
+# ============================================================
+*.sqlite3
+*.db
+*.sqlite
+datasets/
+data/
+logs/
+checkpoint/
+checkpoints/
+saved_model/
+runs/
+wandb/
+
+
+# ============================================================
+# Backup / conflict files
+# ============================================================
+*.bak
+*.tmp
+*.orig
+*_BACKUP_*
+*_BASE_*
+*_LOCAL_*
+*_REMOTE_*
+
+
+# ============================================================
+# OS / editor
+# ============================================================
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+
+
+# ============================================================
+# Misc
+# ============================================================
+.cache/
+.coverage
+htmlcov/
