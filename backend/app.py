@@ -64,15 +64,10 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
 
 uri = os.getenv("MONGO_URI")
-client = MongoClient(uri, server_api=ServerApi('1'))
+client = MongoClient(uri, server_api=ServerApi('1'), serverSelectionTimeoutMS=5000)
 db = client["database"]
 users = db["users"]
 history_collection = db["history"]
-try:
-    client.admin.command('ping')
-    print("✅ MongoDB Atlas connection established.")
-except Exception as e:
-    print(f"❌ Failed to connect to MongoDB Atlas: {e}")
 try:
     client.admin.command('ping')
     print("✅ MongoDB Atlas connection established.")
@@ -586,7 +581,12 @@ async def predict_fracture_endpoint(
         # NORMALIZE BEFORE SAVING
         result = normalize_prediction_response(result, "fracture")
         
-        logger.info(f"✅ Prediction successful: {result['diagnosis']} (confidence: {result['confidence']:.1%})")
+        conf_value = float(result.get("confidence", 0))
+        conf_percent = conf_value * 100 if 0 <= conf_value <= 1 else conf_value
+        logger.info(
+            f"✅ Prediction successful: {result.get('diagnosis', 'Unknown')} "
+            f"(confidence: {conf_percent:.1f}%)"
+        )
         
         # Save to history
         history_record = {

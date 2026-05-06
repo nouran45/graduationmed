@@ -150,8 +150,9 @@ class KidneyDiseaseInput(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
 class FractureDetectionResponse(BaseModel):
-    """Response model for fracture detection"""
+    """Response model for Stage E fracture detection"""
     diagnosis: str
+    disease: Optional[str] = None
     confidence: float
     label: int
     success: bool
@@ -159,21 +160,34 @@ class FractureDetectionResponse(BaseModel):
     treatment: str
     all_probabilities: dict
     notes: str
+    type: Optional[str] = "fracture"
+
+    # Stage E optional metadata returned by the new ensemble predictor.
+    stage: Optional[str] = None
+    ensemble: Optional[dict] = None
+    clinical_tier: Optional[str] = None
+    clinical_action: Optional[str] = None
+    needs_radiologist_review: Optional[bool] = None
 
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
-                "diagnosis": "Fracture",
-                "confidence": 0.95,
-                "label": 1,
                 "success": True,
+                "diagnosis": "Fracture",
+                "disease": "Fracture",
+                "confidence": 0.95,
+                "label": 0,
                 "severity": "High",
-                "treatment": "Immediate medical attention required...",
+                "treatment": "Fracture suspected by the AI model. Arrange radiology/orthopedic review.",
                 "all_probabilities": {
-                    "No Fracture": 0.05,
-                    "Fracture": 0.95
+                    "Fracture": 0.95,
+                    "No Fracture": 0.05
                 },
-                "notes": "This is an AI-assisted diagnosis..."
+                "stage": "Stage E — EfficientNetB0 + Swin-T ensemble",
+                "clinical_tier": "T5 — High Confidence Fracture",
+                "needs_radiologist_review": True,
+                "notes": "AI-assisted screening only. This output must not replace radiologist or clinician judgement.",
+                "type": "fracture"
             }
         }
     )
