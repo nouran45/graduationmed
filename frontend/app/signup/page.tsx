@@ -11,6 +11,8 @@ import { Label } from "@/components/ui/label"
 import { Logo } from "@/components/logo"
 import { useToast } from "@/hooks/use-toast"
 
+const API_BASE = (process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:8000").replace(/\/$/, "")
+
 export default function SignupPage() {
   const router = useRouter()
   const { toast } = useToast()
@@ -44,7 +46,7 @@ export default function SignupPage() {
     setIsLoading(true)
 
     try {
-      const response = await fetch(`https://faridaaaa-medical-diagnosis-api.hf.space/register`, {
+      const response = await fetch(`${API_BASE}/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(formData),

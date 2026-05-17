@@ -12,6 +12,8 @@ import { Label } from "@/components/ui/label"
 import { Logo } from "@/components/logo"
 import { useToast } from "@/hooks/use-toast"
 
+const API_BASE = (process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:8000").replace(/\/$/, "")
+
 export default function LoginPage() {
   const router = useRouter()
   const { toast } = useToast()
@@ -26,7 +28,7 @@ export default function LoginPage() {
       const token = localStorage.getItem("access_token")
       if (token) {
         try {
-          const response = await fetch('https://faridaaaa-medical-diagnosis-api.hf.space/verify-token', {
+          const response = await fetch(`${API_BASE}/verify-token`, {
             headers: {
               'Authorization': `Bearer ${token}`
             }
@@ -50,7 +52,7 @@ export default function LoginPage() {
 
   const handleLogin = async (credentials: { email: string; password: string }) => {
     try {
-      const response = await fetch('https://faridaaaa-medical-diagnosis-api.hf.space/login', {
+      const response = await fetch(`${API_BASE}/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
