@@ -26,7 +26,8 @@ export default function LoginPage() {
       const token = localStorage.getItem("access_token")
       if (token) {
         try {
-          const response = await fetch('https://faridaaaa-medical-diagnosis-api.hf.space/verify-token', {
+          const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000'}/login`,
+             {
             headers: {
               'Authorization': `Bearer ${token}`
             }
@@ -50,7 +51,7 @@ export default function LoginPage() {
 
   const handleLogin = async (credentials: { email: string; password: string }) => {
     try {
-      const response = await fetch('https://faridaaaa-medical-diagnosis-api.hf.space/login', {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000'}/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

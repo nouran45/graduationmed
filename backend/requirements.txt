@@ -23,7 +23,6 @@ pandas==2.2.0
 joblib==1.3.2
 
 # === Machine Learning ===
-scikit-learn==1.4.0
 xgboost==2.0.3
 
 # === Deep Learning - Skin Disease ===
@@ -43,3 +42,12 @@ opencv-python==4.9.0.80
 
 # === Additional Dependencies ===
 requests>=2.31.0
+
+
+catboost
+scikit-learn==1.6.1
+lightgbm
+
+
+
+imbalanced-learn

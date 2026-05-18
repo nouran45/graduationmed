@@ -1,390 +1,666 @@
-# utils/predict_heart.py
 import os
-import pickle
-import joblib
-import pandas as pd
-import numpy as np
 import logging
 import traceback
 from pathlib import Path
-from typing import Dict, Any, Optional, Tuple, List
+from typing import Dict, Any, Optional
 
-# ---------------------------------------------------------------------
-# Logging
-# ---------------------------------------------------------------------
+import joblib
+import numpy as np
+import pandas as pd
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------
-# Globals (simple in-process cache)
-# ---------------------------------------------------------------------
-_model = None
-_metadata: Optional[Dict[str, Any]] = None
-_model_path: Optional[Path] = None
-_metadata_path: Optional[Path] = None
+_pipeline = None
 
-# ---------------------------------------------------------------------
-# Feature schema
-# ---------------------------------------------------------------------
-NUMERIC_FEATURES = ['age', 'trestbps', 'chol', 'thalach', 'oldpeak', 'ca']
-CATEGORICAL_FEATURES = ['sex', 'cp', 'fbs', 'restecg', 'exang', 'slope', 'thal']
+CONTINUOUS_NUM  = ['age', 'trestbps', 'chol', 'thalach', 'oldpeak']
+BINARY_NUM      = ['fbs']
+CAT_FEATS       = ['sex', 'cp', 'restecg', 'exang', 'slope']
+ALL_NUMERIC     = CONTINUOUS_NUM + BINARY_NUM
+ALL_FEATS       = ALL_NUMERIC + CAT_FEATS
+ALL_FEATS_MODEL = ALL_FEATS
+N_NUM_FEATS     = len(ALL_NUMERIC)
+N_CAT_FEATS     = len(CAT_FEATS)
 
-# Valid ranges for validation
 VALID_RANGES = {
-    'age': (0, 120),
-    'trestbps': (40, 300),
-    'chol': (100, 600),
-    'thalach': (40, 250),
-    'oldpeak': (0.0, 10.0),
-    'ca': (0, 4),
-    'sex': [0, 1],
-    'cp': [0, 1, 2, 3],
-    'fbs': [0, 1],
-    'restecg': [0, 1, 2],
-    'exang': [0, 1],
-    'slope': [0, 1, 2],
-    'thal': [0, 1, 2, 3, 7]
+    'age'     : (1,   120),
+    'trestbps': (60,  250),
+    'chol'    : (50,  700),
+    'thalach' : (50,  250),
+    'oldpeak' : (0.0, 10.0),
+    'fbs'     : [0, 1],
+    'sex'     : [0, 1],
+    'cp'      : [0, 1, 2, 3],
+    'restecg' : [0, 1, 2],
+    'exang'   : [0, 1],
+    'slope'   : [0, 1, 2],
 }
 
-# ---------------------------------------------------------------------
-# Path helpers
-# ---------------------------------------------------------------------
-def _resolve_paths() -> Tuple[Path, Path]:
+
+# ================================================================
+# FIX: sklearn 1.6 CalibratedClassifierCV compatibility
+#
+# Root cause:
+#   sklearn 1.6 added __sklearn_tags__() to BaseEstimator.
+#   Models pickled with sklearn < 1.6 lack this on their MRO.
+#   CalibratedClassifierCV.predict_proba() calls:
+#     _get_response_values() -> is_classifier() -> get_tags()
+#     -> __sklearn_tags__() -> CRASH
+#
+# Fix:
+#   Strategy 1 — Call XGBClassifier.predict_proba() directly
+#     (XGBoost's own impl does NOT go through sklearn is_classifier).
+#     Then replay calibration manually with cc.calibrators[0].
+#
+#   Strategy 2 — Raw XGBoost Booster via xgb.DMatrix.
+#     Zero sklearn involvement.
+#
+#   Strategy 3 — Monkey-patch __sklearn_tags__ onto XGBClassifier
+#     so sklearn 1.6 can find it, then call the wrapper normally.
+#
+#   Strategy 4 — Uncalibrated booster output (last resort).
+#
+# Key facts from sklearn 1.6 _CalibratedClassifier source:
+#   Attribute name: cc.calibrators  (NO trailing underscore)
+#   Binary classification: ONE calibrator stored (positive class)
+#   proba[:,1] = calibrator.predict(raw_pos_proba)
+#   proba[:,0] = 1 - proba[:,1]
+# ================================================================
+
+def _xgb_predict_proba_safe(calibrated_model, X: np.ndarray) -> np.ndarray:
     """
-    Resolve model + metadata paths.
-    Defaults to ../xgboostweights/heart_xgb_pipeline (1).pkl
+    Get calibrated XGBoost probabilities without triggering sklearn 1.6's
+    broken __sklearn_tags__ introspection on old pickled models.
     """
-    base_dir = Path(__file__).resolve().parent
-    default_model = base_dir.parent / "xgboostweights" / "heart_xgb_pipeline (1).pkl"
-    default_meta = base_dir.parent / "xgboostweights" / "heart_pipeline_metadata (1).pkl"
 
-    model_path = Path(os.getenv("HEART_MODEL_PATH", str(default_model))).resolve()
-    metadata_path = Path(os.getenv("HEART_METADATA_PATH", str(default_meta))).resolve()
-    return model_path, metadata_path
+    # Strategy 1: XGBClassifier.predict_proba + manual calibration replay
+    try:
+        cal_classifiers = calibrated_model.calibrated_classifiers_
+        all_proba = []
+        for cc in cal_classifiers:
+            # XGBClassifier.predict_proba does NOT call is_classifier()
+            raw_proba  = cc.estimator.predict_proba(X)   # shape (n, 2)
+            raw_pos    = raw_proba[:, 1]                  # positive class
+            # cc.calibrators (no underscore) — confirmed from sklearn 1.6 source
+            # Binary: list has ONE calibrator for the positive class
+            calibrator = cc.calibrators[0]
+            cal_pos    = calibrator.predict(raw_pos)
+            all_proba.append(cal_pos)
+        logger.info("  XGB via Strategy 1 (XGBClassifier + manual calibration)")
+        return np.mean(all_proba, axis=0)
+    except Exception as e1:
+        logger.warning(f"  XGB Strategy 1 failed: {e1}")
+
+    # Strategy 2: raw XGBoost Booster — zero sklearn involvement
+    try:
+        import xgboost as xgb
+        cal_classifiers = calibrated_model.calibrated_classifiers_
+        all_proba = []
+        for cc in cal_classifiers:
+            booster = cc.estimator.get_booster()
+            booster.set_param('device', 'cpu')
+            raw_pos    = booster.predict(xgb.DMatrix(X))  # P(positive)
+            calibrator = cc.calibrators[0]
+            cal_pos    = calibrator.predict(raw_pos)
+            all_proba.append(cal_pos)
+        logger.info("  XGB via Strategy 2 (raw Booster + manual calibration)")
+        return np.mean(all_proba, axis=0)
+    except Exception as e2:
+        logger.warning(f"  XGB Strategy 2 failed: {e2}")
+
+    # Strategy 3: monkey-patch __sklearn_tags__ onto XGBClassifier
+    try:
+        import xgboost
+        from sklearn.utils._tags import Tags
+
+        def _xgb_sklearn_tags(self, **kwargs):
+            tags = Tags()
+            tags.estimator_type = "classifier"
+            return tags
+
+        if not hasattr(xgboost.XGBClassifier, '__sklearn_tags__'):
+            xgboost.XGBClassifier.__sklearn_tags__ = _xgb_sklearn_tags
+            logger.warning("  XGB Strategy 3: monkey-patched XGBClassifier.__sklearn_tags__")
+
+        result = calibrated_model.predict_proba(X)[:, 1]
+        logger.info("  XGB via Strategy 3 (monkey-patch)")
+        return result
+    except Exception as e3:
+        logger.warning(f"  XGB Strategy 3 failed: {e3}")
+
+    # Strategy 4: uncalibrated booster output — last resort
+    try:
+        import xgboost as xgb
+        booster = calibrated_model.calibrated_classifiers_[0].estimator.get_booster()
+        booster.set_param('device', 'cpu')
+        raw = booster.predict(xgb.DMatrix(X))
+        logger.warning("  XGB Strategy 4: uncalibrated booster output (last resort)")
+        return raw
+    except Exception as e4:
+        raise RuntimeError(f"All XGB strategies failed. Last: {e4}") from e4
 
 
-# ---------------------------------------------------------------------
-# Helper to convert numpy scalars/lists into Python native types
-# ---------------------------------------------------------------------
-def _to_native(x):
-    """Recursively convert numpy types to native Python types where needed."""
-    if isinstance(x, (np.integer, )):
-        return int(x)
-    if isinstance(x, (np.floating, )):
-        return float(x)
-    if isinstance(x, (np.ndarray, )):
-        return [_to_native(v) for v in x.tolist()]
-    if isinstance(x, list):
-        return [_to_native(v) for v in x]
-    if isinstance(x, dict):
-        return { _to_native(k): _to_native(v) for k, v in x.items() }
-    return x
+# ================================================================
+# ARCHITECTURE CLASSES
+# ================================================================
+
+def add_enhanced_features(X_11: np.ndarray) -> np.ndarray:
+    slope    = X_11[:, 10].reshape(-1, 1)
+    oldpeak  = X_11[:,  4].reshape(-1, 1)
+    cp       = X_11[:,  7].reshape(-1, 1)
+    exang    = X_11[:,  9].reshape(-1, 1)
+    age      = X_11[:,  0].reshape(-1, 1)
+    thalach  = X_11[:,  3].reshape(-1, 1)
+    chol     = X_11[:,  2].reshape(-1, 1)
+    trestbps = X_11[:,  1].reshape(-1, 1)
+    fbs      = X_11[:,  5].reshape(-1, 1)
+    f12 = slope * oldpeak;         f13 = cp * exang
+    f14 = age * oldpeak;           f15 = 1.0 / (thalach + 1e-6)
+    f16 = chol / (age + 1e-6);     f17 = age * thalach
+    f18 = np.log(np.abs(chol) + 1.0)
+    f19 = oldpeak ** 2;            f20 = trestbps * oldpeak
+    f21 = thalach / (age + 1e-6);  f22 = fbs * exang
+    return np.hstack([X_11, f12, f13, f14, f15, f16,
+                      f17, f18, f19, f20, f21, f22])
 
 
-# ---------------------------------------------------------------------
-# Model loader
-# ---------------------------------------------------------------------
-def load_heart_model():
-    """
-    Load the heart disease prediction model and metadata.
-    Returns in-memory cached model + metadata on subsequent calls.
-    """
-    global _model, _metadata, _model_path, _metadata_path
+class PLEEmbedder:
+    def __init__(self, n_bins: int = 8):
+        self.n_bins    = n_bins
+        self.bin_edges: Dict[str, np.ndarray] = {}
 
-    if _model is not None:
-        return _model, _metadata
+    def fit(self, X: np.ndarray, cols: list):
+        self.cols = cols
+        for i, c in enumerate(cols):
+            e = np.quantile(X[:, i], np.linspace(0, 1, self.n_bins + 1))
+            e = np.unique(e)
+            if len(e) < 2:
+                e = np.array([e[0] - 1e-6, e[0] + 1e-6])
+            self.bin_edges[c] = e
 
-    _model_path, _metadata_path = _resolve_paths()
+    def transform(self, X: np.ndarray, cols: list) -> np.ndarray:
+        parts = []
+        for i, c in enumerate(cols):
+            e = self.bin_edges[c]
+            x = X[:, i]
+            bins = []
+            for j in range(len(e) - 1):
+                lo, hi = e[j], e[j + 1]
+                sp = max(hi - lo, 1e-8)
+                bins.append(np.clip((x - lo) / sp, 0, 1))
+            while len(bins) < self.n_bins:
+                bins.append(np.zeros(len(x)))
+            parts.append(np.stack(bins[:self.n_bins], axis=1))
+        return np.concatenate(parts, axis=1)
 
-    if not _model_path.exists():
+
+class GroupSparseAttention(nn.Module):
+    def __init__(self, d: int, n_heads: int, n_groups: int,
+                 top_k: int, dropout: float = 0.1):
+        super().__init__()
+        assert d % n_heads == 0
+        self.h  = n_heads
+        self.dh = d // n_heads
+        self.k  = top_k
+        self.q    = nn.Linear(d, d, bias=False)
+        self.k_   = nn.Linear(d, d, bias=False)
+        self.v    = nn.Linear(d, d, bias=False)
+        self.out  = nn.Linear(d, d)
+        self.drop = nn.Dropout(dropout)
+        self.prior = nn.Parameter(torch.zeros(n_groups, n_groups))
+        nn.init.normal_(self.prior, std=0.02)
+
+    def forward(self, x, group_ids, intra_mask):
+        B, T, _ = x.shape
+        H, Dh   = self.h, self.dh
+        dev = x.device
+        intra_mask = intra_mask.to(dev)
+        group_ids  = group_ids.to(dev)
+        Q = self.q(x).view(B, T, H, Dh).transpose(1, 2)
+        K = self.k_(x).view(B, T, H, Dh).transpose(1, 2)
+        V = self.v(x).view(B, T, H, Dh).transpose(1, 2)
+        lg = torch.matmul(Q, K.transpose(-2, -1)) * (Dh ** -0.5)
+        pb = self.prior[group_ids.unsqueeze(1), group_ids.unsqueeze(0)]
+        lg = lg + pb.unsqueeze(0).unsqueeze(0)
+        intra = intra_mask.unsqueeze(0).unsqueeze(0)
+        inter = ~intra
+        if self.k < T:
+            il = lg.masked_fill(intra, float('-inf'))
+            tv, _ = il.topk(min(self.k, T), dim=-1)
+            lg = lg.masked_fill((il < tv[..., -1:]) & inter, float('-inf'))
+        attn = self.drop(torch.softmax(lg, dim=-1))
+        out  = torch.matmul(attn, V).transpose(1, 2).contiguous().view(B, T, -1)
+        return self.out(out)
+
+
+class GatedFFN(nn.Module):
+    def __init__(self, d: int, mult: int = 2, dr: float = 0.1):
+        super().__init__()
+        self.fc1 = nn.Linear(d, d * mult * 2)
+        self.fc2 = nn.Linear(d * mult, d)
+        self.dr  = nn.Dropout(dr)
+
+    def forward(self, x):
+        h = self.fc1(x)
+        g, v = h.chunk(2, dim=-1)
+        return self.fc2(self.dr(F.silu(g) * v))
+
+
+class ACFLayer(nn.Module):
+    def __init__(self, d, nh, ng, k, ffn_m, dr):
+        super().__init__()
+        self.attn = GroupSparseAttention(d, nh, ng, k, dr)
+        self.ffn  = GatedFFN(d, ffn_m, dr)
+        self.ln1  = nn.LayerNorm(d)
+        self.ln2  = nn.LayerNorm(d)
+        self.dr   = nn.Dropout(dr)
+
+    def forward(self, x, gids, imask):
+        x = x + self.dr(self.attn(self.ln1(x), gids, imask))
+        x = x + self.dr(self.ffn(self.ln2(x)))
+        return x
+
+
+class AdaptiveClinicalFormer(nn.Module):
+    def __init__(self, n_ple, n_cat, cat_cards, d, nh, nl, ng,
+                 gids, k, ffn_m, dr, feat_imp=None):
+        super().__init__()
+        self.n_ple     = n_ple
+        self.n_cat     = n_cat
+        self.n_tok     = n_ple + n_cat
+        self.d         = d
+        self.cat_cards = cat_cards
+        self.num_proj  = nn.Linear(1, d)
+        self.cat_emb   = nn.Embedding(max(max(cat_cards) + 1, 64), d)
+        self.pos_emb   = nn.Embedding(self.n_tok, d)
+
+        if feat_imp is not None:
+            imp   = np.array(feat_imp, dtype=np.float32)
+            imp   = imp / (imp.max() + 1e-8)
+            drops = (0.05 + 0.25 * (1 - imp)).tolist()
+            if len(drops) < self.n_tok:
+                drops += [dr] * (self.n_tok - len(drops))
+            drops = drops[:self.n_tok]
+        else:
+            drops = [dr] * self.n_tok
+        self.feat_drops = nn.ModuleList(
+            [nn.Dropout(float(d_)) for d_ in drops]
+        )
+        self.layers = nn.ModuleList(
+            [ACFLayer(d, nh, ng, k, ffn_m, dr) for _ in range(nl)]
+        )
+        self.ln = nn.LayerNorm(d)
+        in_d = d * self.n_tok
+        self.head = nn.Sequential(
+            nn.Linear(in_d, d * 2), nn.SiLU(), nn.Dropout(dr),
+            nn.Linear(d * 2, d),   nn.SiLU(), nn.Dropout(dr / 2),
+            nn.Linear(d, 1),
+        )
+        self.register_buffer('gids', torch.tensor(gids, dtype=torch.long))
+        self.register_buffer(
+            'imask',
+            torch.tensor(gids, dtype=torch.long).unsqueeze(0) ==
+            torch.tensor(gids, dtype=torch.long).unsqueeze(1),
+        )
+
+    def forward(self, x_ple, x_cat):
+        toks = []
+        for i in range(self.n_ple):
+            t = self.feat_drops[i](self.num_proj(x_ple[:, i:i+1]))
+            toks.append(t)
+        for j in range(self.n_cat):
+            max_idx = self.cat_cards[j] - 1
+            idx = x_cat[:, j].clamp(0, max_idx)
+            t = self.feat_drops[self.n_ple + j](self.cat_emb(idx))
+            toks.append(t)
+        x = torch.stack(toks, 1)
+        x = x + self.pos_emb(
+            torch.arange(self.n_tok, device=x.device)
+        ).unsqueeze(0)
+        for lyr in self.layers:
+            x = lyr(x, self.gids, self.imask)
+        return self.head(self.ln(x).view(x.size(0), -1)).squeeze(-1)
+
+
+class CardioTabNetPipeline:
+    def __init__(self, imputer, scaler, ple_encoder, acf_models,
+                 xgb_model, cat_model, lgbm_model, config, cat_cards,
+                 ple_gids, ensemble_weights, threshold):
+        self.imputer          = imputer
+        self.scaler           = scaler
+        self.ple_encoder      = ple_encoder
+        self.cat_cards        = cat_cards
+        self.ple_gids         = ple_gids
+        self.ensemble_weights = ensemble_weights
+        self.threshold        = threshold
+        self.config           = config
+
+        self.acf_models = []
+        for mdl in acf_models:
+            mdl.cpu()
+            mdl.eval()
+            self.acf_models.append(mdl)
+
+        try:
+            xgb_model.estimator.set_params(device='cpu', tree_method='hist')
+        except Exception:
+            pass
+        self.xgb_model  = xgb_model
+        self.cat_model  = cat_model
+        self.lgbm_model = lgbm_model
+        self.n_ensemble_models = int(len(ensemble_weights))
+
+    def preprocess(self, df: pd.DataFrame) -> np.ndarray:
+        X = df[ALL_FEATS_MODEL].copy()
+        for col in CAT_FEATS:
+            X[col] = X[col].astype(int)
+        X = X.values.astype(np.float32)
+        X_num    = self.imputer.transform(X[:, :N_NUM_FEATS])
+        X_num_sc = self.scaler.transform(X_num)
+        return np.hstack([X_num_sc, X[:, N_NUM_FEATS:]]).astype(np.float32)
+
+    def predict_proba(self, df: pd.DataFrame) -> np.ndarray:
+        X   = self.preprocess(df)
+        X22 = add_enhanced_features(X).astype(np.float32)
+
+        Xple = self.ple_encoder.transform(
+            X[:, :N_NUM_FEATS], ALL_NUMERIC
+        ).astype(np.float32)
+        Xcat = X[:, N_NUM_FEATS:].astype(int)
+
+        device = next(self.acf_models[0].parameters()).device
+        Xpv = torch.tensor(Xple, dtype=torch.float32).to(device)
+        Xcv = torch.tensor(Xcat, dtype=torch.long).to(device)
+
+        acf_probs = []
+        for mdl in self.acf_models:
+            with torch.no_grad():
+                logits = mdl(Xpv, Xcv)
+                acf_probs.append(torch.sigmoid(logits).cpu().numpy())
+        p_acf = np.mean(acf_probs, axis=0)
+
+        # Safe XGB call — bypasses sklearn 1.6 __sklearn_tags__ crash
+        p_xgb = _xgb_predict_proba_safe(self.xgb_model, X22)
+
+        probs_list = [p_acf, p_xgb]
+
+        if self.cat_model is not None:
+            probs_list.append(self.cat_model.predict_proba(X22)[:, 1])
+        if self.lgbm_model is not None:
+            probs_list.append(self.lgbm_model.predict_proba(X22)[:, 1])
+
+        if len(probs_list) != self.n_ensemble_models:
+            raise RuntimeError(
+                f"Ensemble shape mismatch: pipeline was built with "
+                f"{self.n_ensemble_models} models but predict_proba "
+                f"assembled {len(probs_list)}."
+            )
+
+        return np.stack(probs_list, axis=1) @ self.ensemble_weights
+
+    def predict(self, df: pd.DataFrame) -> np.ndarray:
+        return (self.predict_proba(df) >= self.threshold).astype(int)
+
+    def predict_single(self, age, trestbps, chol, thalach, oldpeak,
+                       fbs, sex, cp, restecg, exang, slope):
+        row = pd.DataFrame([{
+            'age': age, 'trestbps': trestbps, 'chol': chol,
+            'thalach': thalach, 'oldpeak': oldpeak, 'fbs': fbs,
+            'sex': sex, 'cp': cp, 'restecg': restecg,
+            'exang': exang, 'slope': slope,
+        }])
+        prob = float(self.predict_proba(row)[0])
+        pred = int(prob >= self.threshold)
+        if   prob >= 0.70:           label = "High risk"
+        elif prob >= self.threshold: label = "Moderate risk"
+        else:                        label = "Low risk"
+        return prob, pred, label
+
+
+# ================================================================
+# PATH RESOLVER
+# ================================================================
+
+def _resolve_model_path() -> Path:
+    env_path = os.getenv("HEART_MODEL_PATH")
+    if env_path:
+        return Path(env_path).resolve()
+    return (
+        Path(__file__).resolve().parent.parent
+        / "xgboostweights"
+        / "cardiotabnet_pipeline.pkl"
+    )
+
+
+# ================================================================
+# LOADER
+# ================================================================
+
+def _register_cardiotabnet_module():
+    import sys, types as _types
+    if 'cardiotabnet_module' in sys.modules:
+        return
+    mod = _types.ModuleType('cardiotabnet_module')
+    for cls in [CardioTabNetPipeline, AdaptiveClinicalFormer,
+                ACFLayer, GroupSparseAttention, GatedFFN, PLEEmbedder]:
+        setattr(mod, cls.__name__, cls)
+    mod.add_enhanced_features = add_enhanced_features
+    sys.modules['cardiotabnet_module'] = mod
+    logger.info("  cardiotabnet_module registered in sys.modules")
+
+
+def load_heart_model() -> CardioTabNetPipeline:
+    global _pipeline
+    if _pipeline is not None:
+        return _pipeline
+
+    _register_cardiotabnet_module()
+    model_path = _resolve_model_path()
+
+    if not model_path.exists():
         msg = (
-            f"Model file not found at: {_model_path}\n"
-            "Set HEART_MODEL_PATH to an absolute path or place the file at the default location:\n"
-            "  <repo_root>/xgboostweights/heart_xgb_pipeline.pkl"
+            f"CardioTabNet pipeline not found at: {model_path}\n"
+            "Place cardiotabnet_pipeline.pkl in backend/xgboostweights/ "
+            "or set the HEART_MODEL_PATH environment variable."
         )
         logger.error(msg)
         raise FileNotFoundError(msg)
 
-    logger.info(f"Loading heart disease model from: {_model_path}")
+    logger.info(f"Loading CardioTabNet pipeline from: {model_path}")
 
-    strategies = [
-        ("joblib", lambda: joblib.load(str(_model_path))),
-        ("pickle", lambda: pickle.load(open(_model_path, "rb"))),
-        ("pickle_latin1", lambda: pickle.load(open(_model_path, "rb"), encoding="latin1")),
-    ]
-
-    last_err: Optional[Exception] = None
-    _model = None
-    for name, loader in strategies:
+    last_err = None
+    for strategy, loader in [
+        ("joblib",        lambda: joblib.load(str(model_path))),
+        ("pickle",        lambda: __import__("pickle").load(
+                              open(model_path, "rb"))),
+        ("pickle_latin1", lambda: __import__("pickle").load(
+                              open(model_path, "rb"), encoding="latin1")),
+    ]:
         try:
-            logger.info(f"Trying loading strategy: {name}")
-            _model = loader()
-            logger.info(f"✅ Successfully loaded model via {name}")
+            logger.info(f"  Trying strategy: {strategy}")
+            _pipeline = loader()
+            logger.info(f"  Loaded via {strategy}")
             break
         except Exception as e:
             last_err = e
-            logger.warning(f"Strategy {name} failed: {e}")
+            logger.warning(f"  Strategy {strategy} failed: {e}")
 
-    if _model is None:
-        err_msg = (
-            "Failed to load heart disease model: All loading strategies failed.\n"
-            f"Path: {_model_path}\n"
-            f"Last error: {last_err}"
+    if _pipeline is None:
+        raise RuntimeError(
+            f"Failed to load pipeline. Last error: {last_err}\n"
+            f"Path: {model_path}"
         )
-        logger.error(err_msg)
-        raise RuntimeError(err_msg)
 
-    _metadata = {}
-    if _metadata_path.exists():
-        logger.info(f"Loading metadata from: {_metadata_path}")
-        try:
-            try:
-                _metadata = joblib.load(str(_metadata_path))
-                logger.info("Loaded metadata using joblib")
-            except Exception:
-                with open(_metadata_path, "rb") as f:
-                    _metadata = pickle.load(f)
-                logger.info("Loaded metadata using pickle")
-        except Exception as e:
-            logger.warning(f"Could not load metadata: {e}")
-            _metadata = {}
-    else:
-        logger.warning(f"Metadata file not found at: {_metadata_path}")
-        _metadata = {}
+    if not hasattr(_pipeline, "predict_proba") or \
+       not hasattr(_pipeline, "threshold"):
+        raise RuntimeError(
+            "Loaded object is not a CardioTabNetPipeline."
+        )
 
-    # Normalize common metadata entries to native python types to avoid JSON encoding issues
-    if isinstance(_metadata, dict):
-        # normalize model_classes if present
-        if "model_classes" in _metadata:
-            try:
-                mc = _metadata["model_classes"]
-                # convert list-like to native ints/str
-                mc_native = []
-                if isinstance(mc, (list, tuple, np.ndarray)):
-                    for v in mc:
-                        if isinstance(v, (np.integer, )):
-                            mc_native.append(int(v))
-                        elif isinstance(v, (np.floating, )):
-                            mc_native.append(float(v))
-                        else:
-                            mc_native.append(v)
-                else:
-                    mc_native = mc
-                _metadata["model_classes"] = mc_native
-            except Exception:
-                pass
-        # normalize best_threshold
-        if "best_threshold" in _metadata:
-            try:
-                _metadata["best_threshold"] = float(_metadata["best_threshold"])
-            except Exception:
-                pass
-        # normalize label_mapping keys/values
-        if "label_mapping" in _metadata and isinstance(_metadata["label_mapping"], dict):
-            try:
-                lm = {}
-                for k, v in _metadata["label_mapping"].items():
-                    try:
-                        new_k = int(k) if not isinstance(k, str) and isinstance(k, (np.integer,)) else (int(k) if isinstance(k, str) and k.isdigit() else k)
-                    except Exception:
-                        new_k = k
-                    lm[_to_native(new_k)] = _to_native(v)
-                _metadata["label_mapping"] = lm
-            except Exception:
-                pass
-
-    logger.info(f"✅ Heart disease model ready")
-    return _model, _metadata
+    logger.info(
+        f"  CardioTabNet ready | threshold={_pipeline.threshold:.3f} | "
+        f"ensemble_models={_pipeline.n_ensemble_models}"
+    )
+    return _pipeline
 
 
-# ---------------------------------------------------------------------
-# Preprocessing & Validation
-# ---------------------------------------------------------------------
-def validate_input(input_data: Dict[str, Any]) -> Dict[str, Any]:
-    """Validate input data ranges and types"""
+# ================================================================
+# INPUT VALIDATION
+# ================================================================
+
+def _validate_input(data: Dict[str, Any]) -> Dict[str, Any]:
     validated = {}
-    
-    for feature in NUMERIC_FEATURES:
-        if feature not in input_data or input_data[feature] is None:
-            raise ValueError(f"Missing required numeric feature: {feature}")
-        
-        val = float(input_data[feature])
-        min_val, max_val = VALID_RANGES[feature]
-        if not (min_val <= val <= max_val):
-            logger.warning(f"{feature}={val} outside expected range [{min_val}, {max_val}]")
-        validated[feature] = val
-    
-    for feature in CATEGORICAL_FEATURES:
-        if feature not in input_data or input_data[feature] is None:
-            raise ValueError(f"Missing required categorical feature: {feature}")
-        
-        val = int(input_data[feature])
-        valid_vals = VALID_RANGES[feature]
-        if val not in valid_vals:
-            logger.warning(f"{feature}={val} not in expected values {valid_vals}")
-        validated[feature] = val
-    
+    numeric_feats  = ['age', 'trestbps', 'chol', 'thalach', 'oldpeak']
+    binary_feats   = ['fbs']
+    category_feats = ['sex', 'cp', 'restecg', 'exang', 'slope']
+
+    for feat in numeric_feats:
+        if feat not in data or data[feat] is None:
+            raise ValueError(f"Missing required feature: {feat}")
+        val = float(data[feat])
+        lo, hi = VALID_RANGES[feat]
+        if not (lo <= val <= hi):
+            logger.warning(f"  {feat}={val} outside expected range [{lo}, {hi}]")
+        validated[feat] = val
+
+    for feat in binary_feats + category_feats:
+        if feat not in data or data[feat] is None:
+            raise ValueError(f"Missing required feature: {feat}")
+        val = int(data[feat])
+        if val not in VALID_RANGES[feat]:
+            logger.warning(f"  {feat}={val} not in expected values {VALID_RANGES[feat]}")
+        validated[feat] = val
+
     return validated
 
 
-def preprocess_heart_data(input_data: Dict[str, Any], metadata: Dict[str, Any]) -> pd.DataFrame:
-    """Preprocess input data for the model"""
-    try:
-        validated = validate_input(input_data)
-        features_order = metadata.get("features_order", NUMERIC_FEATURES + CATEGORICAL_FEATURES)
-        
-        df = pd.DataFrame([validated])
-        df = df.reindex(columns=features_order, fill_value=0)
-        
-        logger.info(f"Preprocessed shape: {df.shape} | columns: {list(df.columns)}")
-        return df
+# ================================================================
+# HELPERS
+# ================================================================
 
-    except Exception as e:
-        logger.error(f"Preprocessing failed: {e}")
-        raise Exception(f"Data preprocessing failed: {e}") from e
+def _risk_level(prob: float) -> str:
+    if prob >= 0.70: return "Very High"
+    if prob >= 0.50: return "High"
+    if prob >= 0.35: return "Moderate"
+    if prob >= 0.20: return "Low"
+    return "Very Low"
 
 
-# ---------------------------------------------------------------------
-# Prediction - WITH PROBABILITY ARRAY SWAP (MODEL IS INVERTED)
-# ---------------------------------------------------------------------
+def _recommendations(has_disease: bool, data: Dict[str, Any], prob: float) -> list:
+    recs = []
+    if has_disease or prob > 0.5:
+        recs += [
+            "🥼 Immediate consultation with a cardiologist is strongly recommended.",
+            "💊 Discuss starting or adjusting cardiac medications with your doctor.",
+            "🩺 Schedule comprehensive cardiac evaluation including ECG and echocardiogram.",
+            "🚭 If you smoke, quitting is the single most important step you can take.",
+        ]
+        if data.get("trestbps", 0) > 140:
+            recs.append("⚠️ High blood pressure detected — strict BP control is critical.")
+        if data.get("chol", 0) > 240:
+            recs.append("📊 Elevated cholesterol — discuss statin therapy with your physician.")
+        if data.get("fbs", 0) == 1:
+            recs.append("🩸 Elevated fasting blood sugar — diabetes management is crucial.")
+        if data.get("oldpeak", 0) > 2.0:
+            recs.append("📈 Significant ST depression — indicates potential myocardial ischemia.")
+        if data.get("exang", 0) == 1:
+            recs.append("⚡ Exercise-induced angina — avoid strenuous activity until cleared by cardiologist.")
+    else:
+        recs += [
+            "✅ Low risk detected — continue heart-healthy lifestyle habits.",
+            "🥗 Maintain a balanced diet rich in fruits, vegetables, and whole grains.",
+            "🏃 Regular physical activity: aim for 150 minutes of moderate exercise weekly.",
+            "🩺 Regular health checkups and monitoring of blood pressure and cholesterol.",
+        ]
+        if data.get("age", 0) > 55:
+            recs.append("👴 Age-related risk — consider more frequent cardiac screening.")
+        if data.get("trestbps", 0) > 120:
+            recs.append("📊 Prehypertension detected — lifestyle modifications recommended.")
+    recs.append(
+        "⚠️ This is an AI-assisted screening tool. "
+        "Always consult a healthcare professional."
+    )
+    return recs
+
+
+def _diagnosis_text(has_disease: bool, prob: float) -> str:
+    pct = prob * 100
+    if has_disease:
+        if prob >= 0.90:
+            return (
+                f"High probability ({pct:.1f}%) of coronary heart disease detected. "
+                "Immediate medical evaluation is strongly recommended."
+            )
+        if prob >= 0.70:
+            return (
+                f"Moderate-high probability ({pct:.1f}%) of heart disease. "
+                "Medical consultation advised for comprehensive cardiac evaluation."
+            )
+        return (
+            f"Possible heart disease detected ({pct:.1f}% probability). "
+            "Further diagnostic testing recommended."
+        )
+    else:
+        no_pct = (1 - prob) * 100
+        if prob <= 0.20:
+            return (
+                f"Low probability of heart disease ({no_pct:.1f}% confidence negative). "
+                "Continue preventive cardiac care and regular monitoring."
+            )
+        return (
+            f"Cardiac function appears normal ({no_pct:.1f}% confidence). "
+            "Maintain heart-healthy lifestyle."
+        )
+
+
+# ================================================================
+# MAIN ENTRY POINT
+# ================================================================
+
 def predict_heart_disease(input_data: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Predict heart disease based on input parameters.
-    
-    Model Labels (Cleveland dataset):
-    - 0 = No heart disease
-    - 1 = Heart disease present
-    
-    CRITICAL: The model's probability array is INVERTED
-    - proba[0] actually contains disease probability
-    - proba[1] actually contains no-disease probability
-    We swap them when extracting.
-    
-    Returns a dict with probabilities, prediction, and recommendations.
-    """
     try:
-        logger.info("❤️ Starting heart disease prediction")
+        logger.info("  CardioTabNet prediction starting")
+        pipeline  = load_heart_model()
+        validated = _validate_input(input_data)
+        logger.info(f"  Input validated: {validated}")
 
-        model, metadata = load_heart_model()
-        df = preprocess_heart_data(input_data, metadata)
+        df   = pd.DataFrame([validated])[ALL_FEATS]
+        prob = float(pipeline.predict_proba(df)[0])
+        pred = int(pipeline.predict(df)[0])
 
-        # -------------------------
-        # Get raw predictions & probabilities
-        # -------------------------
-        raw_pred = None
-        prob_no_disease = 0.5
-        prob_disease = 0.5
-        conf = 0.5
+        has_disease   = bool(pred == 1)
+        prob_no_dis   = round((1.0 - prob) * 100, 2)
+        prob_dis      = round(prob * 100, 2)
+        confidence    = round(max(prob, 1.0 - prob) * 100, 2)
+        risk          = _risk_level(prob)
+        recs          = _recommendations(has_disease, validated, prob)
+        diagnosis     = _diagnosis_text(has_disease, prob)
+        disease_label = (
+            "Heart Disease Detected" if has_disease
+            else "No Heart Disease Detected"
+        )
 
-        # load classes from metadata or model
-        meta_model_classes = metadata.get("model_classes") if metadata else None
-        
-        model_classes = None
-        if meta_model_classes:
-            model_classes = list(meta_model_classes)
-        elif hasattr(model, "classes_"):
-            model_classes = list(model.classes_)
-        else:
-            model_classes = [0, 1]
+        logger.info(
+            f"  Result: {disease_label} | prob={prob_dis}% | "
+            f"threshold={pipeline.threshold:.3f}"
+        )
 
-        logger.info(f"Model classes: {model_classes}")
-
-        # Get probability predictions
-        if hasattr(model, "predict_proba"):
-            try:
-                proba = model.predict_proba(df)[0]
-                logger.info(f"Raw proba array: {proba}")
-                
-                # CRITICAL FIX: SWAP THE PROBABILITIES
-                # The model's array is inverted, so:
-                # proba[0] = disease probability (confusingly labeled as class 0)
-                # proba[1] = no-disease probability (confusingly labeled as class 1)
-                prob_disease = float(proba[0])        # Swap: take first element as disease
-                prob_no_disease = float(proba[1])     # Swap: take second element as no-disease
-                conf = float(max(prob_no_disease, prob_disease))
-                
-                logger.info(f"After SWAP - disease prob: {prob_disease:.4f}, no-disease prob: {prob_no_disease:.4f}")
-                
-            except Exception as e:
-                logger.warning(f"Failed to extract probabilities: {e}")
-                logger.warning(traceback.format_exc())
-                try:
-                    raw_pred = int(model.predict(df)[0])
-                except Exception as e2:
-                    logger.error(f"Also failed to predict: {e2}")
-
-        if raw_pred is None:
-            try:
-                raw_pred = int(model.predict(df)[0])
-                logger.info(f"Raw prediction value: {raw_pred}")
-            except Exception as e:
-                logger.error(f"Failed to get raw prediction: {e}")
-                raise
-
-        # Determine if patient has disease based on probability threshold
-        try:
-            best_threshold = float(metadata.get("best_threshold", 0.5))
-        except Exception:
-            best_threshold = 0.5
-
-        has_heart_disease = prob_disease >= best_threshold
-        pred = 1 if has_heart_disease else 0
-
-        logger.info(f"Threshold: {best_threshold}, Disease prob: {prob_disease:.4f}, Has disease: {has_heart_disease}")
-
-        # -------------------------
-        # Risk, recommendations, output packaging
-        # -------------------------
-        risk_level = determine_risk_level(prob_disease, input_data)
-        recs = generate_heart_recommendations(has_heart_disease, input_data, prob_disease)
-
-        # Convert input_features dict to native Python types
-        input_features_dict = {}
-        for k, v in df.iloc[0].to_dict().items():
-            if isinstance(v, (np.integer, np.floating)):
-                input_features_dict[k] = float(v)
-            elif isinstance(v, np.bool_):
-                input_features_dict[k] = bool(v)
-            else:
-                input_features_dict[k] = v
-
-        # Normalize model_classes into fully native list
-        try:
-            model_classes_native = []
-            for v in model_classes:
-                if isinstance(v, (np.integer, )):
-                    model_classes_native.append(int(v))
-                elif isinstance(v, (np.floating, )):
-                    model_classes_native.append(float(v))
-                else:
-                    model_classes_native.append(v)
-        except Exception:
-            model_classes_native = _to_native(model_classes)
-
-        # Build result with correct probabilities
-        result = {
-            "success": True,
-            "prediction": int(pred) if isinstance(pred, (int, np.integer)) else _to_native(pred),
-            "has_heart_disease": bool(has_heart_disease),
-            "confidence": float(round(conf * 100, 2)),
-            "probability_no_disease": float(round(prob_no_disease * 100, 2)),
-            "probability_disease": float(round(prob_disease * 100, 2)),
-            "risk_level": str(risk_level),
-            "disease": "Heart Disease Detected" if has_heart_disease else "No Heart Disease Detected",
-            "diagnosis": get_heart_diagnosis(has_heart_disease, conf, prob_disease),
-            "recommendations": recs,
-            "input_features": input_features_dict,
-            "all_probabilities": {
-                "0": float(round(prob_no_disease * 100, 2)),
-                "1": float(round(prob_disease * 100, 2))
-            },
-            "model_classes": model_classes_native,
-            "used_threshold": float(best_threshold)
+        return {
+            "success"               : True,
+            "prediction"            : pred,
+            "has_heart_disease"     : has_disease,
+            "confidence"            : confidence,
+            "probability_no_disease": prob_no_dis,
+            "probability_disease"   : prob_dis,
+            "risk_level"            : risk,
+            "disease"               : disease_label,
+            "diagnosis"             : diagnosis,
+            "recommendations"       : recs,
+            "threshold_used"        : float(pipeline.threshold),
         }
-
-        logger.info(f"✅ Final result - {result['disease']}")
-        logger.info(f"   prediction={result['prediction']}, has_disease={result['has_heart_disease']}, prob_disease={prob_disease*100:.1f}%")
-        return result
 
     except FileNotFoundError as e:
         logger.error(str(e))
@@ -393,102 +669,5 @@ def predict_heart_disease(input_data: Dict[str, Any]) -> Dict[str, Any]:
         logger.error(str(e))
         return {"success": False, "error": str(e), "prediction": None, "confidence": 0}
     except Exception as e:
-        logger.error(f"Prediction error: {e}")
-        logger.error(traceback.format_exc())
+        logger.error(f"Prediction error: {e}\n{traceback.format_exc()}")
         return {"success": False, "error": str(e), "prediction": None, "confidence": 0}
-
-
-# ---------------------------------------------------------------------
-# Risk assessment
-# ---------------------------------------------------------------------
-def determine_risk_level(prob_disease: float, input_data: Dict[str, Any]) -> str:
-    """Determine risk level based on disease probability"""
-    if prob_disease >= 0.8:
-        return "Very High"
-    elif prob_disease >= 0.6:
-        return "High"
-    elif prob_disease >= 0.4:
-        return "Moderate"
-    elif prob_disease >= 0.2:
-        return "Low"
-    else:
-        return "Very Low"
-
-
-# ---------------------------------------------------------------------
-# Recommendations & diagnosis text
-# ---------------------------------------------------------------------
-def generate_heart_recommendations(has_disease: bool, input_data: Dict[str, Any], prob: float) -> list:
-    """Generate personalized recommendations"""
-    recs = []
-    
-    if has_disease or prob > 0.5:
-        recs.extend([
-            "🥼 Immediate consultation with a cardiologist is strongly recommended.",
-            "💊 Discuss starting or adjusting cardiac medications with your doctor.",
-            "🩺 Schedule comprehensive cardiac evaluation including ECG and echocardiogram.",
-            "🚭 If you smoke, quitting is the single most important step you can take.",
-            "💪 Begin supervised cardiac rehabilitation if recommended by your doctor.",
-        ])
-        
-        if input_data.get('trestbps', 0) > 140:
-            recs.append("⚠️ High blood pressure detected - strict BP control is critical for heart health.")
-        
-        if input_data.get('chol', 0) > 240:
-            recs.append("📊 Elevated cholesterol - discuss statin therapy with your physician.")
-        
-        if input_data.get('fbs', 0) == 1:
-            recs.append("🩸 Elevated blood sugar - diabetes management is crucial for cardiac protection.")
-        
-        if input_data.get('thalach', 0) < 100:
-            recs.append("❤️ Low maximum heart rate - may indicate reduced cardiac fitness.")
-        
-        if input_data.get('oldpeak', 0) > 2.0:
-            recs.append("📈 Significant ST depression - indicates potential myocardial ischemia.")
-        
-        if input_data.get('exang', 0) == 1:
-            recs.append("⚡ Exercise-induced angina detected - avoid strenuous activity until cleared by cardiologist.")
-        
-        if input_data.get('ca', 0) >= 1:
-            recs.append("🔬 Major vessel blockage suspected - immediate cardiac intervention may be needed.")
-    
-    else:
-        recs.extend([
-            "✅ Low risk detected, but continue heart-healthy lifestyle habits.",
-            "🥗 Maintain a balanced diet rich in fruits, vegetables, and whole grains.",
-            "🏃 Regular physical activity: aim for 150 minutes of moderate exercise weekly.",
-            "⚖️ Maintain healthy weight and BMI.",
-            "🩺 Regular health checkups and monitoring of blood pressure and cholesterol.",
-            "😴 Ensure adequate sleep (7-9 hours) and manage stress effectively.",
-        ])
-        
-        if input_data.get('age', 0) > 55:
-            recs.append("👴 Age-related risk - consider more frequent cardiac screening.")
-        
-        if input_data.get('sex', 0) == 1:
-            recs.append("👨 Males have higher baseline risk - maintain vigilant cardiovascular monitoring.")
-        
-        if input_data.get('trestbps', 0) > 120:
-            recs.append("📊 Prehypertension detected - lifestyle modifications to prevent progression.")
-    
-    recs.append("⚠️ This is an AI-assisted screening tool. Always consult healthcare professionals for diagnosis.")
-    
-    return recs
-
-
-def get_heart_diagnosis(has_disease: bool, confidence: float, prob: float) -> str:
-    """Generate diagnosis text"""
-    if has_disease:
-        if confidence > 0.90:
-            return f"High probability ({prob*100:.1f}%) of coronary heart disease detected. Immediate medical evaluation is strongly recommended. This prediction is based on clinical cardiac indicators."
-        elif confidence > 0.75:
-            return f"Moderate-high probability ({prob*100:.1f}%) of heart disease. Medical consultation advised for comprehensive cardiac evaluation."
-        else:
-            return f"Possible heart disease detected ({prob*100:.1f}% probability). Further diagnostic testing recommended."
-    else:
-        if confidence > 0.90:
-            return f"Low probability ({(1-prob)*100:.1f}%) of heart disease. Continue preventive cardiac care and regular monitoring."
-        elif confidence > 0.75:
-            return f"Cardiac function appears normal ({(1-prob)*100:.1f}% confidence). Maintain heart-healthy lifestyle."
-        else:
-            return f"Uncertain result. Consider additional cardiac testing for definitive assessment."

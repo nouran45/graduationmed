@@ -19,7 +19,7 @@ from typing import List, Dict, Any
 import os
 import logging
 import tempfile
-from utils.predict import predict_skin_disease
+#from utils.predict import predict_skin_disease
 import requests
 from typing import Optional
 import tempfile
@@ -33,7 +33,7 @@ from utils.predict_diabetes import predict_diabetes
 from models import KidneyDiseaseInput  
 from utils.predict_kidney import predict_kidney_disease  
 from utils.predict_fracture import predict_fracture
-from models import HeartDiseaseInput
+from models import HeartDiseaseInput, HeartDiseaseResponse
 from utils.predict_heart import predict_heart_disease
 from models import DiabetesInput, AnemiaInput, AnemiaResponse
 from utils.predict_anemia import predict_anemia, generate_anemia_recommendations
@@ -223,53 +223,53 @@ async def read_users_me(current_user: Dict[str, Any] = Depends(get_current_user)
 
 
 
-@app.post("/predict")
-async def predict(
-    file: UploadFile = File(...),
-    current_user: dict = Depends(get_current_user)
-):
-    try:
+# @app.post("/predict")
+# async def predict(
+#     file: UploadFile = File(...),
+#     current_user: dict = Depends(get_current_user)
+# ):
+#     try:
         
         
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as temp_file:
-            content = await file.read()
-            temp_file.write(content)
-            temp_path = temp_file.name
+#         with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as temp_file:
+#             content = await file.read()
+#             temp_file.write(content)
+#             temp_path = temp_file.name
         
         
         
-        result = predict_skin_disease(temp_path)
+#         result = predict_skin_disease(temp_path)
         
-        if not result.get("success", False):
-            raise HTTPException(
-                status_code=400,
-                detail=result.get("error", "Prediction failed")
-            )
+#         if not result.get("success", False):
+#             raise HTTPException(
+#                 status_code=400,
+#                 detail=result.get("error", "Prediction failed")
+#             )
         
 
 
-        history_record = {
-            "user_id": current_user["_id"],
-            "prediction": result,
-            "type": "skin_disease",
-            "created_at": datetime.now(timezone.utc)
-        }
-        history_collection.insert_one(history_record)
+    #     history_record = {
+    #         "user_id": current_user["_id"],
+    #         "prediction": result,
+    #         "type": "skin_disease",
+    #         "created_at": datetime.now(timezone.utc)
+    #     }
+    #     history_collection.insert_one(history_record)
         
-        return result
+    #     return result
         
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Server error: {str(e)}"
-        )
-    finally:
+    # except HTTPException:
+    #     raise
+    # except Exception as e:
+    #     raise HTTPException(
+    #         status_code=500,
+    #         detail=f"Server error: {str(e)}"
+    #     )
+    # finally:
  
  
-        if 'temp_path' in locals() and os.path.exists(temp_path):
-            os.unlink(temp_path)
+    #     if 'temp_path' in locals() and os.path.exists(temp_path):
+    #         os.unlink(temp_path)
 
 
 @app.post("/save-history")
@@ -615,56 +615,78 @@ async def predict_fracture_endpoint(
             os.unlink(temp_path)
             logger.info(f"🗑️ Cleaned up temp file")
 
-@app.post("/predict-heart")
+
+
+@app.post("/predict-heart", response_model=HeartDiseaseResponse)
 async def predict_heart_endpoint(
-    data: HeartDiseaseInput, 
+    data: HeartDiseaseInput,
     current_user: dict = Depends(get_current_user)
 ):
     """
-    Predict heart disease based on clinical cardiac indicators
-    Uses Cleveland heart disease dataset features
+    Predict heart disease based on 11 clinical cardiac indicators.
+ 
+    Uses CardioTabNet: AdaptiveClinicalFormer + XGBoost + CatBoost + LightGBM ensemble.
+    Trained on IEEE Heart Disease dataset (1190 patients).
+    CV performance: ACC 95.97% | AUC 98.43% | F1 96.20%
+ 
+    Required features (11):
+        age, trestbps, chol, thalach, oldpeak, fbs,
+        sex, cp, restecg, exang, slope
+ 
+    Note: ca and thal are NOT required — this model uses the IEEE
+    dataset which does not include those Cleveland-specific features.
     """
     logger.info("❤️ Heart disease prediction request received")
-    
+ 
     try:
-        # Convert Pydantic model to dict
+        # ── 1. Convert Pydantic model to plain dict ───────────────────
         input_data = data.dict()
-        
-        # Call the prediction function
+ 
+        # ── 2. Run prediction ─────────────────────────────────────────
         result = predict_heart_disease(input_data)
-        
+ 
         if not result.get("success", False):
             raise HTTPException(
                 status_code=400,
                 detail=result.get("error", "Heart disease prediction failed")
             )
-        
-        logger.info(f"✅ Prediction successful: {result['disease']} (confidence: {result['confidence']}%)")
-        
-        # NORMALIZE BEFORE SAVING
+ 
+        logger.info(
+            f"✅ Prediction: {result['disease']} "
+            f"(confidence: {result['confidence']}% | "
+            f"threshold: {result.get('threshold_used', 'N/A')})"
+        )
+ 
+        # ── 3. Normalize before saving (same as other endpoints) ──────
         result = normalize_prediction_response(result, "heart")
-
-        # Save to history
+ 
+        # ── 4. Ensure threshold_used key survives normalization ───────
+        # normalize_prediction_response may not know this key — guard it
+        if "threshold_used" not in result:
+            result["threshold_used"] = 0.415   # fallback to trained value
+ 
+        # ── 5. Save to history (same pattern as all other endpoints) ──
         history_record = {
-            "user_id": current_user["_id"],
+            "user_id":    current_user["_id"],
             "prediction": result,
-            "type": "heart",
+            "type":       "heart",
             "created_at": datetime.now(timezone.utc)
         }
         history_collection.insert_one(history_record)
         logger.info("💾 Saved to history")
-        
+ 
         return result
-        
+ 
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"❌ Heart disease prediction error: {str(e)}")
+        logger.error(f"❌ Heart disease prediction error: {str(e)}\n{traceback.format_exc()}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Server error: {str(e)}"
         )
     
+
 @app.post("/predict-anemia")
 async def predict_anemia_endpoint(
     data: AnemiaInput, 

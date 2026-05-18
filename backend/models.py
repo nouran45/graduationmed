@@ -194,75 +194,99 @@ class FractureDetectionResponse(BaseModel):
 
 # -------- Heart Disease Model --------
 
+# ─────────────────────────────────────────────────────────────────────
+# HEART DISEASE MODEL — models.py replacement block
+#
+# WHAT CHANGED vs the old block:
+#   REMOVED: ca   (number of major vessels — not in IEEE dataset)
+#   REMOVED: thal (thalassemia — not in IEEE dataset)
+#   KEPT:    all 11 remaining features — same names, same types
+#   ADDED:   fbs moved to numeric group (it is binary 0/1 but the
+#            pipeline treats it as a numeric feature by position)
+#
+# Only replace the HeartDiseaseInput and HeartDiseaseResponse classes.
+# Everything else in models.py stays exactly the same.
+# ─────────────────────────────────────────────────────────────────────
+
 class HeartDiseaseInput(BaseModel):
-    """Input model for heart disease prediction (Cleveland dataset)"""
+    """
+    Input model for CardioTabNet heart disease prediction.
+    IEEE Heart Disease dataset — 11 features.
 
-    # Numeric features
-    age: float = Field(..., description="Age in years", ge=0, le=120)
-    trestbps: float = Field(..., description="Resting blood pressure (mmHg)", ge=40, le=300)
-    chol: float = Field(..., description="Serum cholesterol (mg/dL)", ge=100, le=600)
-    thalach: float = Field(..., description="Maximum heart rate achieved", ge=40, le=250)
-    oldpeak: float = Field(..., description="ST depression induced by exercise", ge=0.0, le=10.0)
-    ca: float = Field(..., description="Number of major vessels (0-4)", ge=0, le=4)
+    Removed vs old model: ca (major vessels), thal (thalassemia).
+    These were Cleveland dataset features not present in the IEEE dataset
+    that CardioTabNet was trained on.
+    """
 
-    # Categorical features
-    sex: int = Field(..., description="Sex (0=female, 1=male)")
-    cp: int = Field(..., description="Chest pain type (0-3)")
+    # ── Numeric features ──────────────────────────────────────────────
+    age:      float = Field(..., description="Age in years",                      ge=1,   le=120)
+    trestbps: float = Field(..., description="Resting blood pressure (mmHg)",     ge=60,  le=250)
+    chol:     float = Field(..., description="Serum cholesterol (mg/dL)",          ge=50,  le=700)
+    thalach:  float = Field(..., description="Maximum heart rate achieved (bpm)", ge=50,  le=250)
+    oldpeak:  float = Field(..., description="ST depression (exercise vs rest)",  ge=0.0, le=10.0)
+
+    # ── Binary numeric (treated as numeric by the pipeline) ───────────
     fbs: int = Field(..., description="Fasting blood sugar > 120 mg/dL (0=no, 1=yes)")
-    restecg: int = Field(..., description="Resting ECG results (0,1,2)")
-    exang: int = Field(..., description="Exercise induced angina (0=no, 1=yes)")
-    slope: int = Field(..., description="Slope of peak exercise ST segment (0,1,2)")
-    thal: int = Field(..., description="Thalassemia (0,1,2,3,7)")
+
+    # ── Categorical features ──────────────────────────────────────────
+    sex:     int = Field(..., description="Sex (0=female, 1=male)")
+    cp:      int = Field(..., description="Chest pain type (0=typical angina, 1=atypical, 2=non-anginal, 3=asymptomatic)")
+    restecg: int = Field(..., description="Resting ECG results (0=normal, 1=ST-T abnormality, 2=LV hypertrophy)")
+    exang:   int = Field(..., description="Exercise-induced angina (0=no, 1=yes)")
+    slope:   int = Field(..., description="Slope of peak exercise ST segment (0=upsloping, 1=flat, 2=downsloping)")
 
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
-                "age": 63,
-                "sex": 1,
-                "cp": 3,
-                "trestbps": 145,
-                "chol": 233,
-                "fbs": 1,
-                "restecg": 0,
-                "thalach": 150,
-                "exang": 0,
-                "oldpeak": 2.3,
-                "slope": 0,
-                "ca": 0,
-                "thal": 1
+                "age":      55,
+                "trestbps": 130,
+                "chol":     240,
+                "thalach":  150,
+                "oldpeak":  1.5,
+                "fbs":      0,
+                "sex":      1,
+                "cp":       3,
+                "restecg":  0,
+                "exang":    1,
+                "slope":    1,
             }
         }
     )
 
 
 class HeartDiseaseResponse(BaseModel):
-    """Response model for heart disease prediction"""
-    success: bool
-    prediction: int
-    has_heart_disease: bool
-    confidence: float
+    """
+    Response model for CardioTabNet heart disease prediction.
+    Identical structure to the old response — frontend needs no changes.
+    """
+    success:                bool
+    prediction:             int
+    has_heart_disease:      bool
+    confidence:             float
     probability_no_disease: float
-    probability_disease: float
-    risk_level: str
-    disease: str
-    diagnosis: str
-    recommendations: List[str]
-    threshold_used: float
+    probability_disease:    float
+    risk_level:             str
+    disease:                str
+    diagnosis:              str
+    recommendations:        List[str]
+    # renamed from used_threshold in the old version to threshold_used
+    # to match what predict_heart.py returns — both names work, pick one
+    threshold_used:         float
 
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
-                "success": True,
-                "prediction": 1,
-                "has_heart_disease": True,
-                "confidence": 95.5,
-                "probability_no_disease": 4.5,
-                "probability_disease": 95.5,
-                "risk_level": "Very High",
-                "disease": "Heart Disease Detected",
-                "diagnosis": "High probability of coronary heart disease...",
-                "recommendations": ["Immediate consultation with cardiologist..."],
-                "threshold_used": 0.5
+                "success":                True,
+                "prediction":             1,
+                "has_heart_disease":      True,
+                "confidence":             89.2,
+                "probability_no_disease": 10.8,
+                "probability_disease":    89.2,
+                "risk_level":             "Very High",
+                "disease":                "Heart Disease Detected",
+                "diagnosis":              "High probability (89.2%) of coronary heart disease detected. Immediate medical evaluation is strongly recommended.",
+                "recommendations":        ["🥼 Immediate consultation with a cardiologist is strongly recommended."],
+                "threshold_used":         0.415,
             }
         }
     )
