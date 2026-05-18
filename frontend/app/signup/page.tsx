@@ -4,6 +4,7 @@ import { useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { ArrowLeft, Eye, EyeOff } from "lucide-react"
+
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -18,6 +19,7 @@ export default function SignupPage() {
   const { toast } = useToast()
   const [isLoading, setIsLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
+
   const [formData, setFormData] = useState({
     firstName: "",
     lastName: "",
@@ -48,9 +50,11 @@ export default function SignupPage() {
     try {
       const response = await fetch(`${API_BASE}/register`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify(formData),
-        credentials: "include"
+        credentials: "include",
       })
 
       const data = await response.json()
@@ -58,10 +62,12 @@ export default function SignupPage() {
       toast({
         title: response.ok ? "Signup Successful" : "Signup Failed",
         description: data.message || data.detail || "Unknown response",
-        variant: response.ok ? "default" : "destructive"
+        variant: response.ok ? "default" : "destructive",
       })
 
-      if (response.ok) router.push("/login")
+      if (response.ok) {
+        router.push("/login")
+      }
     } catch (error: any) {
       toast({
         title: "Signup Error",
@@ -90,11 +96,14 @@ export default function SignupPage() {
       <div className="flex-1 flex items-center justify-center p-4">
         <Card className="w-full max-w-md border-0 shadow-lg">
           <CardHeader className="space-y-1">
-            <CardTitle className="text-2xl font-bold text-center text-secondary">Create an account</CardTitle>
+            <CardTitle className="text-2xl font-bold text-center text-secondary">
+              Create an account
+            </CardTitle>
             <CardDescription className="text-center">
               Enter your information below to create your account
             </CardDescription>
           </CardHeader>
+
           <form onSubmit={handleSubmit}>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
@@ -108,6 +117,7 @@ export default function SignupPage() {
                     onChange={handleChange}
                   />
                 </div>
+
                 <div className="space-y-2">
                   <Label htmlFor="lastName">Last Name</Label>
                   <Input
@@ -119,6 +129,7 @@ export default function SignupPage() {
                   />
                 </div>
               </div>
+
               <div className="space-y-2">
                 <Label htmlFor="email">Email</Label>
                 <Input
@@ -130,6 +141,7 @@ export default function SignupPage() {
                   onChange={handleChange}
                 />
               </div>
+
               <div className="space-y-2">
                 <Label htmlFor="password">Password</Label>
                 <div className="relative">
@@ -142,6 +154,7 @@ export default function SignupPage() {
                     onChange={handleChange}
                     className="pr-10"
                   />
+
                   <button
                     type="button"
                     className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500"
@@ -151,6 +164,7 @@ export default function SignupPage() {
                   </button>
                 </div>
               </div>
+
               <div className="space-y-2">
                 <Label htmlFor="confirmPassword">Confirm Password</Label>
                 <Input
@@ -162,24 +176,34 @@ export default function SignupPage() {
                   onChange={handleChange}
                 />
               </div>
+
               <div className="space-y-2">
                 <div className="flex items-center space-x-2">
                   <input type="checkbox" id="terms" className="h-4 w-4" required />
                   <label htmlFor="terms" className="text-sm text-gray-600">
                     I agree to the{" "}
-                    <Link href="/terms" className="text-primary hover:underline">Terms</Link> and{" "}
-                    <Link href="/privacy" className="text-primary hover:underline">Privacy Policy</Link>
+                    <Link href="/terms" className="text-primary hover:underline">
+                      Terms
+                    </Link>{" "}
+                    and{" "}
+                    <Link href="/privacy" className="text-primary hover:underline">
+                      Privacy Policy
+                    </Link>
                   </label>
                 </div>
               </div>
             </CardContent>
+
             <CardFooter className="flex flex-col space-y-4">
               <Button type="submit" className="w-full" disabled={isLoading}>
                 {isLoading ? "Creating account..." : "Create Account"}
               </Button>
+
               <div className="text-center text-sm">
                 <span className="text-gray-600">Already have an account?</span>{" "}
-                <Link href="/login" className="text-primary hover:underline">Sign in</Link>
+                <Link href="/login" className="text-primary hover:underline">
+                  Sign in
+                </Link>
               </div>
             </CardFooter>
           </form>

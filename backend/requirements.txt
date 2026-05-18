@@ -44,3 +44,11 @@ opencv-python==4.9.0.80
 
 # === Additional Dependencies ===
 requests>=2.31.0
+
+
+catboost
+lightgbm
+
+
+
+imbalanced-learn

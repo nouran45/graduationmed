@@ -30,112 +30,110 @@ export default function LoginPage() {
         try {
           const response = await fetch(`${API_BASE}/verify-token`, {
             headers: {
-              'Authorization': `Bearer ${token}`
-            }
+              Authorization: `Bearer ${token}`,
+            },
           })
-          
+
           if (response.ok) {
-            
             router.push("/dashboard")
           } else {
             localStorage.removeItem("access_token")
             localStorage.removeItem("user")
+            localStorage.removeItem("isLoggedIn")
           }
         } catch (error) {
           localStorage.removeItem("access_token")
           localStorage.removeItem("user")
+          localStorage.removeItem("isLoggedIn")
         }
       }
     }
+
     verifyToken()
   }, [router])
 
   const handleLogin = async (credentials: { email: string; password: string }) => {
     try {
       const response = await fetch(`${API_BASE}/login`, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
         body: JSON.stringify({
           email: credentials.email,
-          password: credentials.password
-        })
-      });
-      console.log(response)
+          password: credentials.password,
+        }),
+      })
+
       if (!response.ok) {
-        let errorMessage = 'Login failed';
-        
+        let errorMessage = "Login failed"
+
         try {
-          const errorData = await response.json();
-          // Handle FastAPI validation errors
+          const errorData = await response.json()
+
           if (Array.isArray(errorData.detail)) {
-            errorMessage = errorData.detail.map((err: any) => 
-              `${err.loc.join('.')}: ${err.msg}`
-            ).join('\n');
-          } else if (typeof errorData.detail === 'string') {
-            errorMessage = errorData.detail;
+            errorMessage = errorData.detail
+              .map((err: any) => `${err.loc.join(".")}: ${err.msg}`)
+              .join("\n")
+          } else if (typeof errorData.detail === "string") {
+            errorMessage = errorData.detail
           } else if (errorData.message) {
-            errorMessage = errorData.message;
+            errorMessage = errorData.message
           }
         } catch (e) {
-          errorMessage = response.statusText || 'Login failed';
+          errorMessage = response.statusText || "Login failed"
         }
-        
-        throw new Error(errorMessage);
+
+        throw new Error(errorMessage)
       }
 
-      const data = await response.json();
-      
+      const data = await response.json()
+
       if (!data.access_token) {
-        throw new Error('No access token received');
+        throw new Error("No access token received")
       }
 
-      localStorage.setItem('access_token', data.access_token);
-      localStorage.setItem('user', JSON.stringify(data.user));
-      localStorage.setItem('isLoggedIn', 'true');
-      return data;
-      
+      localStorage.setItem("access_token", data.access_token)
+      localStorage.setItem("user", JSON.stringify(data.user || {}))
+      localStorage.setItem("isLoggedIn", "true")
+
+      return data
     } catch (error) {
-      console.error('Login error:', error);
-      throw error;
+      console.error("Login error:", error)
+      throw error
     }
-  };
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
 
     try {
-      const credentials = { email, password };
-      const data = await handleLogin(credentials);
+      await handleLogin({ email, password })
 
       toast({
         title: "Login successful",
         description: "You are now logged in to your account.",
-      });
+      })
 
-      const user = JSON.parse(localStorage.getItem('user') || '{}');
-      router.push(user.role === 'admin' ? '/admin' : '/dashboard');
-      
+      const user = JSON.parse(localStorage.getItem("user") || "{}")
+      router.push(user.role === "admin" ? "/admin" : "/dashboard")
     } catch (error: any) {
-      let errorMessage = "Invalid email or password. Please try again.";
-      
+      let errorMessage = "Invalid email or password. Please try again."
+
       if (error instanceof Error) {
-        errorMessage = error.message;
+        errorMessage = error.message
       }
-      
+
       toast({
         title: "Login failed",
         description: errorMessage,
         variant: "destructive",
-      });
+      })
     } finally {
-      setIsLoading(false);
+      setIsLoading(false)
     }
   }
-
-
 
   return (
     <div className="min-h-screen bg-muted flex flex-col">
@@ -154,15 +152,20 @@ export default function LoginPage() {
       <div className="flex-1 flex items-center justify-center p-4">
         <Card className="w-full max-w-md border-0 shadow-lg">
           <CardHeader className="space-y-1">
-            <CardTitle className="text-2xl font-bold text-center text-secondary">Sign in to your account</CardTitle>
+            <CardTitle className="text-2xl font-bold text-center text-secondary">
+              Sign in to your account
+            </CardTitle>
             <CardDescription className="text-center">
               Enter your email and password to access your health dashboard
             </CardDescription>
           </CardHeader>
+
           <form onSubmit={handleSubmit}>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="email" className="text-secondary">Email</Label>
+                <Label htmlFor="email" className="text-secondary">
+                  Email
+                </Label>
                 <Input
                   id="email"
                   type="email"
@@ -173,13 +176,17 @@ export default function LoginPage() {
                   className="border-gray-300 focus:border-primary focus:ring-primary"
                 />
               </div>
+
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <Label htmlFor="password" className="text-secondary">Password</Label>
+                  <Label htmlFor="password" className="text-secondary">
+                    Password
+                  </Label>
                   <Link href="/forgot-password" className="text-sm text-primary hover:underline">
                     Forgot password?
                   </Link>
                 </div>
+
                 <div className="relative">
                   <Input
                     id="password"
@@ -189,6 +196,7 @@ export default function LoginPage() {
                     onChange={(e) => setPassword(e.target.value)}
                     className="border-gray-300 focus:border-primary focus:ring-primary pr-10"
                   />
+
                   <button
                     type="button"
                     className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500"
@@ -198,19 +206,24 @@ export default function LoginPage() {
                   </button>
                 </div>
               </div>
+
               <div className="flex items-center space-x-2">
                 <input
                   type="checkbox"
                   id="remember"
                   className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
                 />
-                <Label htmlFor="remember" className="text-sm text-gray-600">Remember me</Label>
+                <Label htmlFor="remember" className="text-sm text-gray-600">
+                  Remember me
+                </Label>
               </div>
             </CardContent>
+
             <CardFooter className="flex flex-col space-y-4">
               <Button type="submit" className="w-full bg-primary text-white hover:bg-primary/90" disabled={isLoading}>
                 {isLoading ? "Signing in..." : "Sign In"}
               </Button>
+
               <div className="relative">
                 <div className="absolute inset-0 flex items-center">
                   <span className="w-full border-t"></span>
@@ -219,23 +232,50 @@ export default function LoginPage() {
                   <span className="bg-white px-2 text-gray-500">Or continue with</span>
                 </div>
               </div>
+
               <div className="grid grid-cols-2 gap-4">
                 <Button variant="outline" type="button" className="border-gray-300">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-2">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className="mr-2"
+                  >
                     <path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"></path>
                   </svg>
                   Facebook
                 </Button>
+
                 <Button variant="outline" type="button" className="border-gray-300">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-2">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className="mr-2"
+                  >
                     <path d="M23 3a10.9 10.9 0 0 1-3.14 1.53 4.48 4.48 0 0 0-7.86 3v1A10.66 10.66 0 0 1 3 4s-4 9 5 13a11.64 11.64 0 0 1-7 2c9 5 20 0 20-11.5a4.5 4.5 0 0 0-.08-.83A7.72 7.72 0 0 0 23 3z"></path>
                   </svg>
                   Google
                 </Button>
               </div>
+
               <div className="text-center text-sm mt-4">
                 <span className="text-gray-600">Don't have an account?</span>{" "}
-                <Link href="/signup" className="text-primary hover:underline">Sign up</Link>
+                <Link href="/signup" className="text-primary hover:underline">
+                  Sign up
+                </Link>
               </div>
             </CardFooter>
           </form>
