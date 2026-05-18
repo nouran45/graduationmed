@@ -1,269 +1,477 @@
-# utils/predict_kidney.py
-import os, pickle, joblib, pandas as pd, logging, traceback
-from pathlib import Path
-from typing import Dict, Any, Optional, Tuple, List
+# backend/utils/predict_kidney.py
+"""
+Kidney Phase 6 PyTorch FT-Transformer integration.
 
-logging.basicConfig(level=logging.INFO)
+Expected local model folder, not committed to Git:
+    backend/ml_models/kidney_phase6/
+        best_model_phase6.pt
+        best_model_phase6_config.json
+        encoding_maps.json
+        feature_info.json
+        imputer.joblib
+        scaler.joblib
+        metadata.json
+
+The FastAPI route in app.py can stay the same:
+    from utils.predict_kidney import predict_kidney_disease
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+import math
+import os
+import traceback
+from pathlib import Path
+from typing import Any, Dict, Optional, Tuple
+
+import joblib
+import numpy as np
+import torch
+import torch.nn as nn
+
 logger = logging.getLogger(__name__)
 
-# --- Canonical NEW schema (19 features) ---
-SCHEMA_19 = [
-    "sex", "age", "blood_pressure", "specific_gravity", "albumin", "sugar",
-    "blood_glucose_random", "blood_urea", "serum_creatinine",
-    "sodium", "potassium", "hemoglobin", "packed_cell_volume",
-    "white_blood_cell_count", "red_blood_cell_count",
-    "hypertension", "diabetes", "anemia", "edema",
-]
 
-# Accept a wide set of keys -> map to our 19 names
+# -----------------------------
+# Model architecture
+# -----------------------------
+
+class FeatureTokenizer(nn.Module):
+    """Turns each scalar feature into a learnable token."""
+
+    def __init__(self, input_dim: int, d_token: int):
+        super().__init__()
+        self.weight = nn.Parameter(torch.empty(input_dim, d_token))
+        self.bias = nn.Parameter(torch.empty(input_dim, d_token))
+        nn.init.xavier_uniform_(self.weight)
+        nn.init.zeros_(self.bias)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # x: [batch, input_dim] -> [batch, input_dim, d_token]
+        return x.unsqueeze(-1) * self.weight.unsqueeze(0) + self.bias.unsqueeze(0)
+
+
+class ModelB_FTTransformer(nn.Module):
+    """Architecture used by best_model_phase6.pt."""
+
+    def __init__(
+        self,
+        input_dim: int = 46,
+        d_token: int = 64,
+        n_heads: int = 4,
+        n_layers: int = 3,
+        dim_ff: int = 256,
+        dropout: float = 0.1,
+        attn_dropout: float = 0.1,  # kept for config compatibility; dropout is disabled in eval mode
+        activation: str = "gelu",
+    ):
+        super().__init__()
+        self.tokeniser = FeatureTokenizer(input_dim, d_token)
+        self.cls_token = nn.Parameter(torch.zeros(1, 1, d_token))
+
+        encoder_layer = nn.TransformerEncoderLayer(
+            d_model=d_token,
+            nhead=n_heads,
+            dim_feedforward=dim_ff,
+            dropout=dropout,
+            activation=activation,
+            batch_first=True,
+            norm_first=False,
+        )
+        self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=n_layers)
+        self.norm = nn.LayerNorm(d_token)
+        self.classifier = nn.Sequential(
+            nn.Linear(d_token, 32),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(32, 1),
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        tokens = self.tokeniser(x)
+        cls = self.cls_token.expand(x.size(0), -1, -1)
+        tokens = torch.cat([cls, tokens], dim=1)
+        encoded = self.transformer(tokens)
+        cls_out = self.norm(encoded[:, 0])
+        return self.classifier(cls_out).squeeze(-1)
+
+
+# -----------------------------
+# Globals / cache
+# -----------------------------
+
+_ARTIFACTS: Optional[Dict[str, Any]] = None
+
+# Names accepted from frontend/Pydantic -> model feature names
 ALIASES = {
-    # basic numerics (short/long/camel)
-    "age":"age",
-    "bp":"blood_pressure", "bloodpressure":"blood_pressure", "blood_pressure":"blood_pressure",
-    "sg":"specific_gravity", "specificgravity":"specific_gravity", "specific_gravity":"specific_gravity",
-    "al":"albumin", "albumin":"albumin",
-    "su":"sugar", "sugar":"sugar",
-    "bgr":"blood_glucose_random", "bloodglucoserandom":"blood_glucose_random", "blood_glucose_random":"blood_glucose_random",
-    "bu":"blood_urea", "bloodurea":"blood_urea", "blood_urea":"blood_urea",
-    "sc":"serum_creatinine", "serumcreatinine":"serum_creatinine", "serum_creatinine":"serum_creatinine",
-    "sod":"sodium", "sodium":"sodium",
-    "pot":"potassium", "potassium":"potassium",
-    "hemo":"hemoglobin", "hemoglobin":"hemoglobin",
-    "pcv":"packed_cell_volume", "packedcellvolume":"packed_cell_volume", "packed_cell_volume":"packed_cell_volume",
-    "wc":"white_blood_cell_count", "whitebloodcellcount":"white_blood_cell_count", "white_blood_cell_count":"white_blood_cell_count",
-    "rc":"red_blood_cell_count", "redbloodcellcount":"red_blood_cell_count", "red_blood_cell_count":"red_blood_cell_count",
+    # numeric UCI short names
+    "bp": "blood_pressure",
+    "bloodpressure": "blood_pressure",
+    "blood_pressure": "blood_pressure",
+    "sg": "specific_gravity",
+    "specificgravity": "specific_gravity",
+    "specific_gravity": "specific_gravity",
+    "al": "albumin",
+    "albumin": "albumin",
+    "su": "sugar",
+    "sugar": "sugar",
+    "bgr": "blood_glucose_random",
+    "bloodglucoserandom": "blood_glucose_random",
+    "blood_glucose_random": "blood_glucose_random",
+    "bu": "blood_urea",
+    "bloodurea": "blood_urea",
+    "blood_urea": "blood_urea",
+    "sc": "serum_creatinine",
+    "serumcreatinine": "serum_creatinine",
+    "serum_creatinine": "serum_creatinine",
+    "sod": "sodium",
+    "sodium": "sodium",
+    "pot": "potassium",
+    "potassium": "potassium",
+    "hemo": "haemoglobin",
+    "hemoglobin": "haemoglobin",
+    "haemoglobin": "haemoglobin",
+    "pcv": "packed_cell_volume",
+    "packedcellvolume": "packed_cell_volume",
+    "packed_cell_volume": "packed_cell_volume",
+    "wc": "white_blood_cell_count",
+    "wbcc": "white_blood_cell_count",
+    "whitebloodcellcount": "white_blood_cell_count",
+    "white_blood_cell_count": "white_blood_cell_count",
+    "rc": "red_blood_cell_count",
+    "rbcc": "red_blood_cell_count",
+    "redbloodcellcount": "red_blood_cell_count",
+    "red_blood_cell_count": "red_blood_cell_count",
+    "age": "age",
+    "egfr": "egfr",
 
-    # booleans / categories (old & new)
-    "htn":"hypertension", "hypertension":"hypertension",
-    "dm":"diabetes", "diabetes":"diabetes", "diabetes_mellitus":"diabetes",
-    "ane":"anemia", "anemia":"anemia",
-    "pe":"edema", "edema":"edema", "pedal_edema":"edema",
+    # categorical UCI fields
+    "rbc": "rbc",
+    "red_blood_cells": "rbc",
+    "redbloodcells": "rbc",
+    "pc": "pus_cell",
+    "pus_cell": "pus_cell",
+    "puscell": "pus_cell",
+    "pcc": "pus_cell_clumps",
+    "pus_cell_clumps": "pus_cell_clumps",
+    "puscellclumps": "pus_cell_clumps",
+    "ba": "bacteria",
+    "bacteria": "bacteria",
+    "htn": "hypertension",
+    "hypertension": "hypertension",
+    "dm": "diabetes_mellitus",
+    "diabetes": "diabetes_mellitus",
+    "diabetes_mellitus": "diabetes_mellitus",
+    "cad": "coronary_artery_disease",
+    "coronaryarterydisease": "coronary_artery_disease",
+    "coronary_artery_disease": "coronary_artery_disease",
+    "appet": "appetite",
+    "appetite": "appetite",
+    "pe": "pedal_edema",
+    "edema": "pedal_edema",
+    "pedal_edema": "pedal_edema",
+    "pedaledema": "pedal_edema",
+    "ane": "anaemia",
+    "anemia": "anaemia",
+    "anaemia": "anaemia",
 
-    # sex / gender
-    "sex":"sex", "gender":"sex",
-
-    # legacy CKD-24 extras (we’ll ignore them by not including in final columns)
-    "rbc":None, "pc":None, "pcc":None, "ba":None, "bacteria":None,
-    "cad":None, "coronary_artery_disease":None, "appet":None, "appetite":None,
+    # source feature
+    "source": "source_enc",
+    "source_enc": "source_enc",
 }
 
-# categorical mappings on our 19 features
-YES_NO = {"yes": 1, "no": 0}
-SEX_MAP = {"male": 1, "female": 0}
 
-_model = None
-_expected_feats: Optional[List[str]] = None
+# -----------------------------
+# Loading helpers
+# -----------------------------
 
-def _resolve_paths() -> Tuple[Path, Path]:
-    base = Path(__file__).resolve().parent
-    model = Path(os.getenv("CKD_MODEL_PATH", str(base.parent / "xgboostweights" / "ckd_xgb_pipeline2.pkl"))).resolve()
-    meta  = Path(os.getenv("CKD_METADATA_PATH", str(base.parent / "xgboostweights" / "ckd_pipeline_metadata2.pkl"))).resolve()
-    return model, meta
+def _model_dir() -> Path:
+    """Resolve model folder. Default is backend/ml_models/kidney_phase6."""
+    here = Path(__file__).resolve()
+    backend_dir = here.parents[1]
+    default_dir = backend_dir / "ml_models" / "kidney_phase6"
+    return Path(os.getenv("CKD_MODEL_DIR", str(default_dir))).resolve()
 
-def _extract_feature_names_from_model(model) -> Optional[List[str]]:
-    # try common places to find feature_names_in_
+
+def _read_json(path: Path) -> Dict[str, Any]:
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def load_kidney_artifacts() -> Dict[str, Any]:
+    global _ARTIFACTS
+    if _ARTIFACTS is not None:
+        return _ARTIFACTS
+
+    folder = _model_dir()
+    required = [
+        "best_model_phase6.pt",
+        "best_model_phase6_config.json",
+        "encoding_maps.json",
+        "feature_info.json",
+        "imputer.joblib",
+        "scaler.joblib",
+    ]
+    missing = [name for name in required if not (folder / name).exists()]
+    if missing:
+        raise FileNotFoundError(
+            f"Kidney model files are missing in {folder}. Missing: {', '.join(missing)}"
+        )
+
+    config = _read_json(folder / "best_model_phase6_config.json")
+    encoding_maps = _read_json(folder / "encoding_maps.json")
+    feature_info = _read_json(folder / "feature_info.json")
+
+    model_kwargs = dict(config.get("model_kwargs", {}))
+    # Safety fallback if config is incomplete
+    model_kwargs.setdefault("input_dim", int(config.get("input_dim", 46)))
+    model = ModelB_FTTransformer(**model_kwargs)
+
+    state = torch.load(folder / "best_model_phase6.pt", map_location="cpu")
+    model.load_state_dict(state, strict=True)
+    model.eval()
+
+    imputer = joblib.load(folder / "imputer.joblib")
+    scaler = joblib.load(folder / "scaler.joblib")
+
+    _ARTIFACTS = {
+        "folder": folder,
+        "model": model,
+        "imputer": imputer,
+        "scaler": scaler,
+        "config": config,
+        "encoding_maps": encoding_maps,
+        "feature_info": feature_info,
+        "threshold": float(config.get("selected_threshold", 0.5)),
+    }
+    logger.info("✅ Kidney Phase 6 model loaded from %s", folder)
+    return _ARTIFACTS
+
+
+# -----------------------------
+# Feature engineering
+# -----------------------------
+
+def _norm_key(key: Any) -> str:
+    return str(key).strip().replace(" ", "_").replace("-", "_").lower()
+
+
+def _is_missing(value: Any) -> bool:
+    if value is None:
+        return True
+    if isinstance(value, str) and value.strip() == "":
+        return True
     try:
-        if hasattr(model, "feature_names_in_"):
-            return list(model.feature_names_in_)
-        if hasattr(model, "steps"):  # sklearn Pipeline
-            for _, step in model.steps:
-                if hasattr(step, "feature_names_in_"):
-                    return list(step.feature_names_in_)
-                # ColumnTransformer inner steps
-                if hasattr(step, "transformers_"):
-                    for _, tr, _ in step.transformers_:
-                        if hasattr(tr, "feature_names_in_"):
-                            return list(tr.feature_names_in_)
-        # XGB/other wrappers sometimes stash it on .preprocessor_ or similar
-        for attr in ("preprocessor_", "preprocess_", "processor_", "imputer_"):
-            if hasattr(model, attr) and hasattr(getattr(model, attr), "feature_names_in_"):
-                return list(getattr(model, attr).feature_names_in_)
+        return bool(np.isnan(value))
     except Exception:
-        pass
-    return None
+        return False
 
-def load_kidney_model():
-    global _model, _expected_feats
-    if _model is not None:
-        return _model, _expected_feats or SCHEMA_19
 
-    model_path, meta_path = _resolve_paths()
-    if not model_path.exists():
-        raise FileNotFoundError(f"Model file not found at: {model_path}")
+def _safe_float(value: Any) -> float:
+    if _is_missing(value):
+        return np.nan
+    try:
+        return float(value)
+    except Exception:
+        return np.nan
 
-    logger.info(f"Loading kidney disease model from: {model_path}")
-    for name, fn in [
-        ("joblib", lambda: joblib.load(str(model_path))),
-        ("pickle", lambda: pickle.load(open(model_path, "rb"))),
-        ("pickle_latin1", lambda: pickle.load(open(model_path, "rb"), encoding="latin1")),
-    ]:
-        try:
-            _model = fn()
-            logger.info(f"✅ Loaded model via {name}")
-            break
-        except Exception as e:
-            logger.warning(f"{name} loader failed: {e}")
-    if _model is None:
-        raise RuntimeError("Failed to load kidney model.")
 
-    feats = _extract_feature_names_from_model(_model)
-    if feats is None:
-        # try metadata
-        if meta_path.exists():
-            try:
-                meta = joblib.load(str(meta_path))
-                feats = meta.get("feature_names")
-            except Exception as e:
-                logger.warning(f"Metadata load failed: {e}")
-    # default to our 19-schema if nothing extracted
-    _expected_feats = list(feats) if isinstance(feats, list) else SCHEMA_19
-
-    logger.info(f"✅ Expected feature names ({len(_expected_feats)}): {_expected_feats}")
-    return _model, _expected_feats
-
-def _to_canonical_19(inp: Dict[str, Any]) -> Dict[str, Any]:
-    # normalise keys to lower/no spaces
-    norm = {str(k).strip().replace(" ", "_").lower(): v for k, v in inp.items()}
+def _canonicalise_input(input_data: Dict[str, Any]) -> Dict[str, Any]:
     out: Dict[str, Any] = {}
-    for k, v in norm.items():
-        target = ALIASES.get(k, None)
-        if target is None:
-            continue  # legacy extras ignored
-        out[target] = v
+    for key, value in input_data.items():
+        nk = _norm_key(key)
+        target = ALIASES.get(nk)
+        if target:
+            out[target] = value
     return out
 
-def preprocess_kidney_data(input_data: Dict[str, Any], expected_feats: List[str]) -> pd.DataFrame:
-    try:
-        data = _to_canonical_19(input_data)
 
-        # yes/no → 0/1
-        for key in ("hypertension", "diabetes", "anemia", "edema"):
-            if key in data:
-                if isinstance(data[key], str):
-                    data[key] = YES_NO.get(data[key].lower(), data[key])
-        # sex → 0/1 (only if model expects it)
-        if "sex" in expected_feats:
-            val = data.get("sex", "")
-            if isinstance(val, str):
-                data["sex"] = SEX_MAP.get(val.lower(), 0)
-            else:
-                data["sex"] = int(val) if val in (0, 1) else 0
+def _encode_categorical(feature: str, value: Any, binary_map: Dict[str, Dict[str, int]]) -> float:
+    if _is_missing(value):
+        return np.nan
+    if isinstance(value, (int, float, np.integer, np.floating)):
+        return float(value)
 
-        # numeric coercion for all non-boolean fields
-        for k in expected_feats:
-            if k not in data:
-                data[k] = 0.0
-            elif k not in ("hypertension", "diabetes", "anemia", "edema", "sex"):
-                try:
-                    v = data[k]
-                    data[k] = 0.0 if v in (None, "") else float(v)
-                except Exception:
-                    logger.warning(f"Cannot convert {k}={data[k]} to float; default 0.0")
-                    data[k] = 0.0
+    text = str(value).strip().lower()
+    fmap = binary_map.get(feature, {})
+    if text in fmap:
+        return float(fmap[text])
 
-        df = pd.DataFrame([data], columns=expected_feats)  # strict order
-        logger.info(f"Preprocessed columns: {list(df.columns)}")
-        return df
-    except Exception as e:
-        logger.error(f"Preprocessing failed: {e}")
-        raise
+    # Friendly fallbacks
+    yes_no = {"yes": 1.0, "no": 0.0, "true": 1.0, "false": 0.0, "present": 1.0, "notpresent": 0.0}
+    if text in yes_no:
+        return yes_no[text]
+
+    return np.nan
+
+
+def _compute_egfr(canonical: Dict[str, Any]) -> float:
+    existing = canonical.get("egfr")
+    if not _is_missing(existing):
+        return _safe_float(existing)
+
+    age = max(_safe_float(canonical.get("age")), 1.0)
+    scr = max(_safe_float(canonical.get("serum_creatinine")), 0.1)
+    if math.isnan(age) or math.isnan(scr):
+        return np.nan
+
+    # Formula provided in metadata.json
+    return float(175 * (scr ** -1.154) * (age ** -0.203))
+
+
+def build_kidney_feature_array(input_data: Dict[str, Any], artifacts: Dict[str, Any]) -> np.ndarray:
+    feature_info = artifacts["feature_info"]
+    encoding_maps = artifacts["encoding_maps"]
+    binary_map = encoding_maps.get("uci_binary_map", {})
+
+    base_features = feature_info["feature_names_25"]
+    miss_features = feature_info["miss_indicator_names"]
+    all_features = feature_info["all_feature_names_with_source"]
+
+    categorical_features = set(binary_map.keys())
+    canonical = _canonicalise_input(input_data)
+    canonical["egfr"] = _compute_egfr(canonical)
+
+    values: Dict[str, float] = {}
+
+    for feature in base_features:
+        raw = canonical.get(feature, np.nan)
+        if feature in categorical_features:
+            values[feature] = _encode_categorical(feature, raw, binary_map)
+        else:
+            values[feature] = _safe_float(raw)
+
+    for miss_name in miss_features:
+        original_feature = miss_name.replace("miss_", "", 1)
+        values[miss_name] = 1.0 if _is_missing(values.get(original_feature, np.nan)) else 0.0
+
+    source_value = canonical.get("source_enc", 0)
+    if isinstance(source_value, str):
+        values["source_enc"] = float(feature_info.get("source_map", {}).get(source_value.lower(), 0))
+    else:
+        values["source_enc"] = _safe_float(source_value)
+        if math.isnan(values["source_enc"]):
+            values["source_enc"] = 0.0
+
+    row = [values.get(name, np.nan) for name in all_features]
+    X = np.asarray([row], dtype=np.float32)
+
+    expected_n = int(getattr(artifacts["imputer"], "n_features_in_", X.shape[1]))
+    if X.shape[1] != expected_n:
+        raise ValueError(f"Feature count mismatch. Built {X.shape[1]} features, expected {expected_n}.")
+
+    return X
+
+
+
+def _impute_and_scale(X_raw: np.ndarray, imputer: Any, scaler: Any) -> np.ndarray:
+    """
+    Version-safe inference preprocessing.
+
+    The uploaded imputer/scaler were saved with a specific scikit-learn version.
+    Calling .transform() can fail if another version is installed, so we use the
+    learned statistics directly: median imputation, then standard scaling.
+    """
+    X = np.asarray(X_raw, dtype=np.float32).copy()
+
+    statistics = np.asarray(getattr(imputer, "statistics_"), dtype=np.float32)
+    if statistics.shape[0] != X.shape[1]:
+        raise ValueError(f"Imputer expects {statistics.shape[0]} features, got {X.shape[1]}.")
+
+    missing_mask = np.isnan(X)
+    if missing_mask.any():
+        _, cols = np.where(missing_mask)
+        X[missing_mask] = statistics[cols]
+
+    mean = np.asarray(getattr(scaler, "mean_"), dtype=np.float32)
+    scale = np.asarray(getattr(scaler, "scale_"), dtype=np.float32)
+    if mean.shape[0] != X.shape[1] or scale.shape[0] != X.shape[1]:
+        raise ValueError("Scaler feature count does not match the model feature count.")
+
+    scale = np.where(scale == 0, 1.0, scale)
+    return ((X - mean) / scale).astype(np.float32)
+
+# -----------------------------
+# Public prediction function
+# -----------------------------
 
 def predict_kidney_disease(input_data: Dict[str, Any]) -> Dict[str, Any]:
     try:
-        logger.info("🔎 Starting kidney disease prediction (19-schema)")
-        model, expected_feats = load_kidney_model()
-        df = preprocess_kidney_data(input_data, expected_feats)
+        artifacts = load_kidney_artifacts()
+        model: nn.Module = artifacts["model"]
+        imputer = artifacts["imputer"]
+        scaler = artifacts["scaler"]
+        threshold = artifacts["threshold"]
 
-        pred = model.predict(df)[0]
-        has_ckd = bool(int(pred) == 1)
+        X_raw = build_kidney_feature_array(input_data, artifacts)
+        X_scaled = _impute_and_scale(X_raw, imputer, scaler)
 
-        prob_no = prob_yes = conf = 0.5
-        if hasattr(model, "predict_proba"):
-            try:
-                proba = model.predict_proba(df)[0]
-                if hasattr(model, "classes_"):
-                    classes = list(model.classes_)
-                    idx_yes = classes.index(1) if 1 in classes else 1
-                    idx_no = classes.index(0) if 0 in classes else (0 if idx_yes != 0 else 1)
-                else:
-                    idx_no, idx_yes = 0, 1
-                prob_no, prob_yes = float(proba[idx_no]), float(proba[idx_yes])
-                conf = max(prob_no, prob_yes)
-            except Exception as e:
-                logger.warning(f"predict_proba failed: {e}")
+        with torch.no_grad():
+            x_tensor = torch.tensor(X_scaled, dtype=torch.float32)
+            logit = model(x_tensor)
+            probability_ckd = float(torch.sigmoid(logit).item())
+
+        prediction = int(probability_ckd >= threshold)
+        has_ckd = bool(prediction == 1)
+        probability_no_ckd = 1.0 - probability_ckd
+        confidence = probability_ckd if has_ckd else probability_no_ckd
 
         return {
             "success": True,
-            "prediction": int(pred),
+            "type": "kidney",
+            "model_name": "B_Focal Phase 6 FT-Transformer",
+            "prediction": prediction,
             "has_kidney_disease": has_ckd,
-            "confidence": round(conf * 100, 2),
-            "probability_no_ckd": round(prob_no * 100, 2),
-            "probability_ckd": round(prob_yes * 100, 2),
-            "risk_level": "High" if has_ckd else "Low",
             "disease": "Chronic Kidney Disease" if has_ckd else "No Chronic Kidney Disease",
+            "risk_level": "High" if has_ckd else ("Moderate" if probability_ckd >= 0.25 else "Low"),
+            "confidence": round(confidence, 4),
+            "probability_ckd": round(probability_ckd, 4),
+            "probability_no_ckd": round(probability_no_ckd, 4),
+            "selected_threshold": threshold,
+            "all_probabilities": {
+                "CKD": round(probability_ckd, 4),
+                "Non-CKD": round(probability_no_ckd, 4),
+            },
+            "diagnosis": get_kidney_diagnosis(has_ckd, confidence),
+            "recommendations": generate_kidney_recommendations(has_ckd, input_data),
+            "notes": "AI-assisted screening only. This is not a medical diagnosis.",
         }
 
     except FileNotFoundError as e:
+        logger.error("Kidney model file error: %s", e)
         return {"success": False, "error": str(e), "prediction": None, "confidence": 0}
     except Exception as e:
-        logger.error(f"Prediction error: {e}")
+        logger.error("Kidney prediction error: %s", e)
         logger.error(traceback.format_exc())
-        return {"success": False, "error": f"{e}", "prediction": None, "confidence": 0}
+        return {"success": False, "error": str(e), "prediction": None, "confidence": 0}
 
-# ----------------------------
-# Text helpers
-# ----------------------------
-def generate_kidney_recommendations(has_ckd: bool, input_data: Dict[str, Any]) -> list:
-    recs = []
+
+def generate_kidney_recommendations(has_ckd: bool, input_data: Dict[str, Any]) -> list[str]:
     if has_ckd:
-        recs.extend([
-            "Consult a nephrologist for comprehensive evaluation.",
-            "Monitor blood pressure; aim for <130/80 mmHg.",
-            "Adopt a kidney-friendly diet low in sodium, phosphorus, and potassium.",
-            "Stay hydrated; follow physician guidance on fluids.",
-            "Avoid nephrotoxic drugs and follow prescriptions carefully.",
-            "If diabetic, maintain tight glycemic control.",
-            "Schedule regular labs for creatinine, GFR, and proteinuria.",
-        ])
-        if input_data.get("hypertension") in (1, "yes") or input_data.get("htn") in (1, "yes"):
-            recs.append("Strict blood pressure control is crucial for kidney protection.")
-        if input_data.get("diabetes_mellitus") in (1, "yes") or input_data.get("dm") in (1, "yes"):
-            recs.append("Maintain HbA1c < 7% where appropriate.")
-        if input_data.get("appetite") in (1, "poor") or input_data.get("appet") in (1, "poor"):
-            recs.append("Work with a dietitian to address appetite while maintaining nutrition.")
-    else:
-        recs.extend([
-            "Maintain a healthy lifestyle to prevent kidney disease.",
-            "Stay adequately hydrated (unless otherwise instructed).",
-            "Balanced diet rich in fruits and vegetables.",
-            "Regular exercise and maintain healthy weight.",
-            "Monitor blood pressure and blood sugar regularly.",
-            "Avoid excessive NSAID use.",
-            "Annual kidney function screening if you have risk factors.",
-        ])
-        try:
-            age = float(input_data.get("age", 0))
-            bp  = float(input_data.get("blood_pressure", input_data.get("bp", 0)))
-            if age > 60:
-                recs.append("Age-related risk—consider more frequent monitoring.")
-            if bp > 140:
-                recs.append("Elevated BP—focus on cardiovascular health.")
-        except Exception:
-            pass
-    return recs
+        return [
+            "Book a medical review with a nephrologist or qualified physician.",
+            "Check kidney function labs such as creatinine, eGFR, and urine protein/albumin.",
+            "Monitor blood pressure and blood glucose regularly.",
+            "Avoid taking NSAIDs or nephrotoxic medicines without medical advice.",
+            "Follow a kidney-friendly diet plan only after consulting a clinician or dietitian.",
+        ]
+    return [
+        "Maintain regular blood pressure and blood glucose screening.",
+        "Stay hydrated unless your doctor advised fluid restriction.",
+        "Maintain a balanced diet and healthy body weight.",
+        "Avoid unnecessary NSAID use and self-medication.",
+        "Repeat kidney screening if symptoms or risk factors appear.",
+    ]
+
 
 def get_kidney_diagnosis(has_ckd: bool, confidence: float) -> str:
     if has_ckd:
-        if confidence > 0.9:
-            return "High probability of CKD. Immediate medical consultation recommended."
-        elif confidence > 0.7:
-            return "Moderate–high probability of CKD. Medical evaluation advised."
-        else:
-            return "Possible CKD detected. Further testing recommended."
-    else:
-        if confidence > 0.9:
-            return "Low probability of CKD. Continue preventive care."
-        elif confidence > 0.7:
-            return "Kidney function appears normal. Regular monitoring recommended."
-        else:
-            return "Uncertain result. Consider additional testing for definitive assessment."
+        if confidence >= 0.85:
+            return "High model probability of CKD. Medical evaluation is strongly recommended."
+        return "Possible CKD risk detected. Further clinical testing is recommended."
+
+    if confidence >= 0.85:
+        return "Low model probability of CKD based on the entered data."
+    return "Uncertain/low-to-moderate risk. Consider clinical follow-up if symptoms or risk factors exist."

@@ -11,7 +11,6 @@ import { Progress } from "@/components/ui/progress";
 import { AlertTriangle, CheckCircle, Heart, Activity } from "lucide-react";
 
 interface KidneyData {
-  sex: string;
   age: number;
   bloodPressure: number;
   specificGravity: number;
@@ -29,7 +28,13 @@ interface KidneyData {
   hypertension: string;
   diabetes: string;
   anemia: string;
-  edema: string;
+  pedalEdema: string;
+  redBloodCells: string;
+  pusCell: string;
+  pusCellClumps: string;
+  bacteria: string;
+  coronaryArteryDisease: string;
+  appetite: string;
 }
 
 interface RiskResult {
@@ -43,7 +48,6 @@ const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:8000"
 
 export function KidneyDiseasePredictor() {
   const [formData, setFormData] = useState<KidneyData>({
-    sex: "",
     age: 45,
     bloodPressure: 80,
     specificGravity: 1.02,
@@ -61,7 +65,13 @@ export function KidneyDiseasePredictor() {
     hypertension: "",
     diabetes: "",
     anemia: "",
-    edema: "",
+    pedalEdema: "",
+    redBloodCells: "normal",
+    pusCell: "normal",
+    pusCellClumps: "notpresent",
+    bacteria: "notpresent",
+    coronaryArteryDisease: "no",
+    appetite: "good",
   });
 
   const [result, setResult] = useState<RiskResult | null>(null);
@@ -70,6 +80,12 @@ export function KidneyDiseasePredictor() {
 
   const updateFormData = (field: keyof KidneyData, value: any) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const toPercent = (value: any) => {
+    const n = Number(value ?? 0);
+    if (!Number.isFinite(n)) return 0;
+    return n <= 1 ? n * 100 : n;
   };
 
   const getRiskColor = (level: string) => {
@@ -95,7 +111,7 @@ export function KidneyDiseasePredictor() {
     setResult(null);
 
     // Required fields validation
-    if (!formData.sex || !formData.hypertension || !formData.diabetes || !formData.anemia || !formData.edema) {
+    if (!formData.hypertension || !formData.diabetes || !formData.anemia || !formData.pedalEdema) {
       setError("Please fill in all required fields.");
       return;
     }
@@ -111,41 +127,32 @@ export function KidneyDiseasePredictor() {
         return;
       }
 
-      // Build payload with correct field names matching KidneyDiseaseInput model
+      // Build payload using the UCI kidney feature names accepted by the backend.
+      // These names match the Phase 6 model metadata and the existing KidneyDiseaseInput aliases.
       const payload = {
         age: Number(formData.age),
         bp: Number(formData.bloodPressure),
         sg: Number(formData.specificGravity),
         al: Number(formData.albumin),
         su: Number(formData.sugar),
-        
-        // Correct field name is 'bgr' (Blood Glucose Random)
+        rbc: formData.redBloodCells,
+        pc: formData.pusCell,
+        pcc: formData.pusCellClumps,
+        ba: formData.bacteria,
         bgr: Number(formData.bloodGlucoseRandom),
-        
         bu: Number(formData.bloodUrea),
         sc: Number(formData.serumCreatinine),
         sod: Number(formData.sodium),
         pot: Number(formData.potassium),
         hemo: Number(formData.hemoglobin),
         pcv: Number(formData.packedCellVolume),
-        
-        // Correct field names for blood cell counts
-        wc: Number(formData.whiteBloodCellCount),  // was wbcc
-        rc: Number(formData.redBloodCellCount),   // was rbcc
-        
-        // Required categorical fields with defaults
-        rbc: "normal",
-        pc: "normal", 
-        pcc: "notpresent",
-        ba: "notpresent",
+        wc: Number(formData.whiteBloodCellCount),
+        rc: Number(formData.redBloodCellCount),
         htn: formData.hypertension === "yes" ? "yes" : "no",
         dm: formData.diabetes === "yes" ? "yes" : "no",
-        cad: "no",
-        appet: "good",
-        
-        // Backend expects 'pe' (pedal edema), not 'edema'
-        pe: formData.edema === "yes" ? "yes" : "no",
-        
+        cad: formData.coronaryArteryDisease === "yes" ? "yes" : "no",
+        appet: formData.appetite,
+        pe: formData.pedalEdema === "yes" ? "yes" : "no",
         ane: formData.anemia === "yes" ? "yes" : "no",
       };
 
@@ -166,14 +173,14 @@ export function KidneyDiseasePredictor() {
 
       const data = await res.json();
 
-      // Map the response to your UI format based on actual backend response structure
+      // Backend may return probabilities as decimals (0.73) or percentages (73).
+      const ckdPercent = toPercent(data.probability_ckd ?? data.all_probabilities?.CKD ?? 0);
+
       const mapped: RiskResult = {
-        riskLevel: data.has_kidney_disease 
-          ? "High" 
-          : (data.probability_ckd > 30 ? "Moderate" : "Low"),
-        riskPercentage: Math.round(data.probability_ckd ?? 0),
+        riskLevel: data.risk_level ?? (data.has_kidney_disease ? "High" : (ckdPercent >= 25 ? "Moderate" : "Low")),
+        riskPercentage: Math.round(ckdPercent),
         recommendations: data.recommendations ?? [],
-        riskFactors: [], // Backend doesn't return risk_factors in current implementation
+        riskFactors: [],
       };
 
       setResult(mapped);
@@ -185,219 +192,292 @@ export function KidneyDiseasePredictor() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto space-y-8">
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
+    <div className="mx-auto max-w-5xl space-y-8 px-4">
+      <Card className="shadow-sm">
+        <CardHeader className="text-center">
+          <CardTitle className="flex items-center justify-center gap-2 text-2xl">
             <Heart className="h-6 w-6 text-primary" />
             Kidney Disease Risk Assessment
           </CardTitle>
-          <p className="text-gray-600">
+          <p className="mx-auto max-w-2xl text-sm text-gray-600">
             Please provide the following information for a comprehensive kidney disease risk evaluation.
           </p>
         </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="grid md:grid-cols-2 gap-6">
-            {/* Basic Information */}
-            <div className="space-y-4">
-              <h3 className="text-lg font-semibold text-secondary">Basic Information</h3>
 
-              <div className="space-y-2">
-                <Label htmlFor="sex">Sex *</Label>
-                <Select value={formData.sex} onValueChange={(v) => updateFormData("sex", v)}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select sex" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="male">Male</SelectItem>
-                    <SelectItem value="female">Female</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+        <CardContent className="space-y-8">
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 lg:items-start">
+            {/* LEFT COLUMN */}
+            <div className="space-y-6">
+              <section className="rounded-xl border bg-white p-4 shadow-sm">
+                <h3 className="mb-4 text-base font-semibold text-secondary">Basic Information</h3>
 
-              <div className="space-y-2">
-                <Label>Age: {formData.age} years</Label>
-                <Slider
-                  value={[formData.age]}
-                  onValueChange={([v]) => updateFormData("age", v)}
-                  min={1}
-                  max={100}
-                  step={1}
-                />
-              </div>
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label>Age: {formData.age} years</Label>
+                    <Slider
+                      value={[formData.age]}
+                      onValueChange={([v]) => updateFormData("age", v)}
+                      min={1}
+                      max={100}
+                      step={1}
+                    />
+                  </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="bloodPressure">Blood Pressure (mmHg)</Label>
-                <Input
-                  id="bloodPressure"
-                  type="number"
-                  value={formData.bloodPressure}
-                  onChange={(e) => updateFormData("bloodPressure", parseFloat(e.target.value))}
-                />
-              </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="bloodPressure">Blood Pressure (mmHg)</Label>
+                    <Input
+                      id="bloodPressure"
+                      type="number"
+                      value={formData.bloodPressure}
+                      onChange={(e) => updateFormData("bloodPressure", parseFloat(e.target.value))}
+                    />
+                  </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="specificGravity">Specific Gravity</Label>
-                <Select
-                  value={formData.specificGravity.toString()}
-                  onValueChange={(v) => updateFormData("specificGravity", parseFloat(v))}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="1.005">1.005</SelectItem>
-                    <SelectItem value="1.010">1.010</SelectItem>
-                    <SelectItem value="1.015">1.015</SelectItem>
-                    <SelectItem value="1.020">1.020</SelectItem>
-                    <SelectItem value="1.025">1.025</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="specificGravity">Specific Gravity</Label>
+                    <Select
+                      value={formData.specificGravity.toString()}
+                      onValueChange={(v) => updateFormData("specificGravity", parseFloat(v))}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select value" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="1.005">1.005</SelectItem>
+                        <SelectItem value="1.010">1.010</SelectItem>
+                        <SelectItem value="1.015">1.015</SelectItem>
+                        <SelectItem value="1.020">1.020</SelectItem>
+                        <SelectItem value="1.025">1.025</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </section>
+
+              <section className="rounded-xl border bg-white p-4 shadow-sm">
+                <h3 className="mb-4 text-base font-semibold text-secondary">Kidney & Chemistry Values</h3>
+
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label>Albumin: {formData.albumin}</Label>
+                    <Slider value={[formData.albumin]} onValueChange={([v]) => updateFormData("albumin", v)} min={0} max={5} step={1} />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Sugar: {formData.sugar}</Label>
+                    <Slider value={[formData.sugar]} onValueChange={([v]) => updateFormData("sugar", v)} min={0} max={5} step={1} />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="bloodGlucose">Blood Glucose Random (mg/dL)</Label>
+                    <Input
+                      id="bloodGlucose"
+                      type="number"
+                      value={formData.bloodGlucoseRandom}
+                      onChange={(e) => updateFormData("bloodGlucoseRandom", parseFloat(e.target.value))}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="bloodUrea">Blood Urea (mg/dL)</Label>
+                    <Input
+                      id="bloodUrea"
+                      type="number"
+                      value={formData.bloodUrea}
+                      onChange={(e) => updateFormData("bloodUrea", parseFloat(e.target.value))}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="serumCreatinine">Serum Creatinine (mg/dL)</Label>
+                    <Input
+                      id="serumCreatinine"
+                      type="number"
+                      value={formData.serumCreatinine}
+                      onChange={(e) => updateFormData("serumCreatinine", parseFloat(e.target.value))}
+                    />
+                  </div>
+                </div>
+              </section>
+
+              <section className="rounded-xl border bg-white p-4 shadow-sm">
+                <h3 className="mb-4 text-base font-semibold text-secondary">Electrolytes & Blood Parameters</h3>
+
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="sodium">Sodium (mEq/L)</Label>
+                    <Input id="sodium" type="number" value={formData.sodium} onChange={(e) => updateFormData("sodium", parseFloat(e.target.value))} />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="potassium">Potassium (mEq/L)</Label>
+                    <Input id="potassium" type="number" value={formData.potassium} onChange={(e) => updateFormData("potassium", parseFloat(e.target.value))} />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="hemoglobin">Hemoglobin (g/dL)</Label>
+                    <Input id="hemoglobin" type="number" value={formData.hemoglobin} onChange={(e) => updateFormData("hemoglobin", parseFloat(e.target.value))} />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="packedCellVolume">Packed Cell Volume</Label>
+                    <Input id="packedCellVolume" type="number" value={formData.packedCellVolume} onChange={(e) => updateFormData("packedCellVolume", parseFloat(e.target.value))} />
+                  </div>
+                </div>
+              </section>
             </div>
 
-            {/* Laboratory Values */}
-            <div className="space-y-4">
-              <h3 className="text-lg font-semibold text-secondary">Laboratory Values</h3>
+            {/* RIGHT COLUMN */}
+            <div className="space-y-6">
+              <section className="rounded-xl border bg-white p-4 shadow-sm">
+                <h3 className="mb-4 text-base font-semibold text-secondary">Cell Counts</h3>
 
-              <div className="space-y-2">
-                <Label>Albumin: {formData.albumin}</Label>
-                <Slider value={[formData.albumin]} onValueChange={([v]) => updateFormData("albumin", v)} min={0} max={5} step={1} />
-              </div>
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="wbc">WBC Count (cells/cumm)</Label>
+                    <Input id="wbc" type="number" value={formData.whiteBloodCellCount} onChange={(e) => updateFormData("whiteBloodCellCount", parseFloat(e.target.value))} />
+                  </div>
 
-              <div className="space-y-2">
-                <Label>Sugar: {formData.sugar}</Label>
-                <Slider value={[formData.sugar]} onValueChange={([v]) => updateFormData("sugar", v)} min={0} max={5} step={1} />
-              </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="rbcCount">RBC Count (millions/cmm)</Label>
+                    <Input id="rbcCount" type="number" value={formData.redBloodCellCount} onChange={(e) => updateFormData("redBloodCellCount", parseFloat(e.target.value))} />
+                  </div>
+                </div>
+              </section>
 
-              <div className="space-y-2">
-                <Label htmlFor="bloodGlucose">Blood Glucose Random (mg/dL)</Label>
-                <Input
-                  id="bloodGlucose"
-                  type="number"
-                  value={formData.bloodGlucoseRandom}
-                  onChange={(e) => updateFormData("bloodGlucoseRandom", parseFloat(e.target.value))}
-                />
-              </div>
+              <section className="rounded-xl border bg-white p-4 shadow-sm">
+                <h3 className="mb-4 text-base font-semibold text-secondary">Medical History</h3>
 
-              <div className="space-y-2">
-                <Label htmlFor="bloodUrea">Blood Urea (mg/dL)</Label>
-                <Input
-                  id="bloodUrea"
-                  type="number"
-                  value={formData.bloodUrea}
-                  onChange={(e) => updateFormData("bloodUrea", parseFloat(e.target.value))}
-                />
-              </div>
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="hypertension">Hypertension *</Label>
+                    <Select value={formData.hypertension} onValueChange={(v) => updateFormData("hypertension", v)}>
+                      <SelectTrigger><SelectValue placeholder="Select option" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="yes">Yes</SelectItem>
+                        <SelectItem value="no">No</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="serumCreatinine">Serum Creatinine (mg/dL)</Label>
-                <Input
-                  id="serumCreatinine"
-                  type="number"
-                  value={formData.serumCreatinine}
-                  onChange={(e) => updateFormData("serumCreatinine", parseFloat(e.target.value))}
-                />
-              </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="diabetes">Diabetes Mellitus *</Label>
+                    <Select value={formData.diabetes} onValueChange={(v) => updateFormData("diabetes", v)}>
+                      <SelectTrigger><SelectValue placeholder="Select option" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="yes">Yes</SelectItem>
+                        <SelectItem value="no">No</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="anemia">Anemia *</Label>
+                    <Select value={formData.anemia} onValueChange={(v) => updateFormData("anemia", v)}>
+                      <SelectTrigger><SelectValue placeholder="Select option" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="yes">Yes</SelectItem>
+                        <SelectItem value="no">No</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="pedalEdema">Pedal Edema *</Label>
+                    <Select value={formData.pedalEdema} onValueChange={(v) => updateFormData("pedalEdema", v)}>
+                      <SelectTrigger><SelectValue placeholder="Select option" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="yes">Yes</SelectItem>
+                        <SelectItem value="no">No</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="coronaryArteryDisease">Coronary Artery Disease</Label>
+                    <Select value={formData.coronaryArteryDisease} onValueChange={(v) => updateFormData("coronaryArteryDisease", v)}>
+                      <SelectTrigger><SelectValue placeholder="Select option" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="yes">Yes</SelectItem>
+                        <SelectItem value="no">No</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="appetite">Appetite</Label>
+                    <Select value={formData.appetite} onValueChange={(v) => updateFormData("appetite", v)}>
+                      <SelectTrigger><SelectValue placeholder="Select option" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="good">Good</SelectItem>
+                        <SelectItem value="poor">Poor</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </section>
+
+              <section className="rounded-xl border bg-white p-4 shadow-sm">
+                <h3 className="mb-4 text-base font-semibold text-secondary">Microscopy Findings</h3>
+
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="redBloodCells">Red Blood Cells</Label>
+                    <Select value={formData.redBloodCells} onValueChange={(v) => updateFormData("redBloodCells", v)}>
+                      <SelectTrigger><SelectValue placeholder="Select option" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="normal">Normal</SelectItem>
+                        <SelectItem value="abnormal">Abnormal</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="pusCell">Pus Cell</Label>
+                    <Select value={formData.pusCell} onValueChange={(v) => updateFormData("pusCell", v)}>
+                      <SelectTrigger><SelectValue placeholder="Select option" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="normal">Normal</SelectItem>
+                        <SelectItem value="abnormal">Abnormal</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="pusCellClumps">Pus Cell Clumps</Label>
+                    <Select value={formData.pusCellClumps} onValueChange={(v) => updateFormData("pusCellClumps", v)}>
+                      <SelectTrigger><SelectValue placeholder="Select option" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="notpresent">Not Present</SelectItem>
+                        <SelectItem value="present">Present</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="bacteria">Bacteria</Label>
+                    <Select value={formData.bacteria} onValueChange={(v) => updateFormData("bacteria", v)}>
+                      <SelectTrigger><SelectValue placeholder="Select option" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="notpresent">Not Present</SelectItem>
+                        <SelectItem value="present">Present</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </section>
             </div>
           </div>
 
-          <div className="grid md:grid-cols-2 gap-6">
-            {/* Electrolytes & Blood Parameters */}
-            <div className="space-y-4">
-              <h3 className="text-lg font-semibold text-secondary">Electrolytes & Blood Parameters</h3>
-
-              <div className="space-y-2">
-                <Label htmlFor="sodium">Sodium (mEq/L)</Label>
-                <Input id="sodium" type="number" value={formData.sodium} onChange={(e) => updateFormData("sodium", parseFloat(e.target.value))} />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="potassium">Potassium (mEq/L)</Label>
-                <Input id="potassium" type="number" value={formData.potassium} onChange={(e) => updateFormData("potassium", parseFloat(e.target.value))} />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="hemoglobin">Hemoglobin (g/dL)</Label>
-                <Input id="hemoglobin" type="number" value={formData.hemoglobin} onChange={(e) => updateFormData("hemoglobin", parseFloat(e.target.value))} />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="packedCellVolume">Packed Cell Volume</Label>
-                <Input id="packedCellVolume" type="number" value={formData.packedCellVolume} onChange={(e) => updateFormData("packedCellVolume", parseFloat(e.target.value))} />
-              </div>
-            </div>
-
-            {/* Medical Conditions */}
-            <div className="space-y-4">
-              <h3 className="text-lg font-semibold text-secondary">Medical Conditions</h3>
-
-              <div className="space-y-2">
-                <Label htmlFor="wbc">WBC Count (cells/cumm)</Label>
-                <Input id="wbc" type="number" value={formData.whiteBloodCellCount} onChange={(e) => updateFormData("whiteBloodCellCount", parseFloat(e.target.value))} />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="rbc">RBC Count (millions/cmm)</Label>
-                <Input id="rbc" type="number" value={formData.redBloodCellCount} onChange={(e) => updateFormData("redBloodCellCount", parseFloat(e.target.value))} />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="hypertension">Hypertension *</Label>
-                <Select value={formData.hypertension} onValueChange={(v) => updateFormData("hypertension", v)}>
-                  <SelectTrigger><SelectValue placeholder="Select option" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="yes">Yes</SelectItem>
-                    <SelectItem value="no">No</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="diabetes">Diabetes Mellitus *</Label>
-                <Select value={formData.diabetes} onValueChange={(v) => updateFormData("diabetes", v)}>
-                  <SelectTrigger><SelectValue placeholder="Select option" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="yes">Yes</SelectItem>
-                    <SelectItem value="no">No</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="anemia">Anemia *</Label>
-                <Select value={formData.anemia} onValueChange={(v) => updateFormData("anemia", v)}>
-                  <SelectTrigger><SelectValue placeholder="Select option" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="yes">Yes</SelectItem>
-                    <SelectItem value="no">No</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="edema">Edema *</Label>
-                <Select value={formData.edema} onValueChange={(v) => updateFormData("edema", v)}>
-                  <SelectTrigger><SelectValue placeholder="Select option" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="yes">Yes</SelectItem>
-                    <SelectItem value="no">No</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          </div>
-
-          <div className="pt-6">
+          <div className="border-t pt-6">
             <Button
               onClick={handleCalculate}
               disabled={
                 isCalculating ||
-                !formData.sex ||
                 !formData.hypertension ||
                 !formData.diabetes ||
                 !formData.anemia ||
-                !formData.edema
+                !formData.pedalEdema
               }
               className="w-full bg-primary text-white hover:bg-primary/90"
               size="lg"
