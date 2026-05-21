@@ -160,3 +160,20 @@ htmlcov/
 # Old Git backups
 .git_old_backup/
 .git_wrong_parent_backup/
+
+
+
+
+# Diabetes model local binary artifacts - do not push
+backend/diabetes_model/nami_model.pt
+backend/diabetes_model/preprocessor.joblib
+backend/diabetes_model/calibrator_isotonic.joblib
+# Local diabetes testing only
+backend/diabetes_test_app.py
+# Local/private files
+backend/.env
+backend/venv/
+frontend/node_modules/
+__pycache__/
+*.pyc
+*.zip
