@@ -107,14 +107,14 @@ export default function ServicesPage() {
 <ServiceCard
   icon="camera"
   title="Skin Condition Analysis"
-  description="AI-powered analysis of skin images to detect potential dermatological conditions with instant visual assessment."
+  description="AI-powered analysis of skin images with protected upload checks and instant visual assessment."
   link="/skin-checker"
 />
               <ServiceCard
                 title="Photo Analysis"
-                description="Upload photos of skin conditions for AI-powered analysis and potential condition matching"
+                description="Upload skin photos for protected AI-powered analysis with robust upload checks and instant condition matching."
                 icon="camera"
-                link="/photo-analysis"
+                link="/skin-checker"
               />
               <ServiceCard
                 title="Health Chat"

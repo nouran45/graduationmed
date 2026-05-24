@@ -105,7 +105,7 @@ export default function Home() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
 
               {/* Category 1 — Skin Analysis */}
-              <Link href="/symptom-checker" className="group block">
+              <Link href="/skin-checker" className="group block">
                 <div className="border border-gray-200 rounded-2xl p-8 hover:border-primary hover:shadow-lg transition-all duration-200 h-full flex flex-col">
                   <div className="w-14 h-14 bg-primary/10 rounded-xl flex items-center justify-center mb-5 group-hover:bg-primary/20 transition-colors">
                     {/* Camera / skin icon */}
@@ -116,7 +116,7 @@ export default function Home() {
                   </div>
                   <h3 className="text-xl font-bold text-secondary mb-3">Skin Condition Analysis</h3>
                   <p className="text-gray-600 text-sm leading-relaxed flex-1">
-                    AI-powered analysis of skin images to detect potential dermatological conditions with instant visual assessment and personalised recommendations.
+                    AI-powered skin image analysis with protected upload checks designed to resist invalid or manipulated inputs, then provide instant visual assessment and personalised recommendations.
                   </p>
                   <div className="mt-6 flex items-center text-primary text-sm font-medium">
                     Start skin analysis <ArrowRight className="ml-2 h-4 w-4 group-hover:translate-x-1 transition-transform" />
