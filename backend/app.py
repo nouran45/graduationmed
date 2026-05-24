@@ -19,7 +19,14 @@ from typing import List, Dict, Any
 import os
 import logging
 import tempfile
-#from utils.predict import predict_skin_disease
+
+# ── Skin disease predictors ────────────────────────────────────────────────
+# predict.py:              base ViT model  → /predict  (clean images)
+# predict_skin_defense.py: Phase F pipeline → /predict-skin-defense (any image)
+from utils.predict import predict_skin_disease
+from utils.predict_skin_defense import predict_skin_defense, get_pipeline_status
+# ──────────────────────────────────────────────────────────────────────────
+
 import requests
 from typing import Optional
 import tempfile
@@ -222,55 +229,179 @@ async def read_users_me(current_user: Dict[str, Any] = Depends(get_current_user)
     }
 
 
+# =============================================================================
+# /predict  — Base ViT skin disease endpoint (clean images)
+# =============================================================================
+@app.post("/predict")
+async def predict(
+    file: UploadFile = File(...),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Predict skin disease from a clean image using the base ViT model.
+    Use /predict-skin-defense for images that may have been adversarially attacked.
+    """
+    temp_path = None
+    try:
+        file_ext = os.path.splitext(file.filename)[1].lower()
+        if file_ext not in {".jpg", ".jpeg", ".png"}:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid file format. Supported: .jpg, .jpeg, .png"
+            )
 
-# @app.post("/predict")
-# async def predict(
-#     file: UploadFile = File(...),
-#     current_user: dict = Depends(get_current_user)
-# ):
-#     try:
-        
-        
-#         with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as temp_file:
-#             content = await file.read()
-#             temp_file.write(content)
-#             temp_path = temp_file.name
-        
-        
-        
-#         result = predict_skin_disease(temp_path)
-        
-#         if not result.get("success", False):
-#             raise HTTPException(
-#                 status_code=400,
-#                 detail=result.get("error", "Prediction failed")
-#             )
-        
+        logger.info(f"🔬 Skin prediction (base ViT) from user: {current_user['email']}")
+
+        with tempfile.NamedTemporaryFile(delete=False, suffix=file_ext) as temp_file:
+            content = await file.read()
+            temp_file.write(content)
+            temp_path = temp_file.name
+
+        result = predict_skin_disease(temp_path)
+
+        if not result.get("success", False):
+            raise HTTPException(
+                status_code=400,
+                detail=result.get("error", "Prediction failed")
+            )
+
+        history_record = {
+            "user_id": current_user["_id"],
+            "prediction": result,
+            "type": "skin_disease",
+            "filename": file.filename,
+            "created_at": datetime.now(timezone.utc)
+        }
+        history_collection.insert_one(history_record)
+        logger.info(f"✅ Base ViT prediction: {result.get('disease')} ({result.get('confidence', 0):.2%})")
+
+        return result
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Skin prediction error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Server error: {str(e)}")
+    finally:
+        if temp_path and os.path.exists(temp_path):
+            os.unlink(temp_path)
 
 
-    #     history_record = {
-    #         "user_id": current_user["_id"],
-    #         "prediction": result,
-    #         "type": "skin_disease",
-    #         "created_at": datetime.now(timezone.utc)
-    #     }
-    #     history_collection.insert_one(history_record)
-        
-    #     return result
-        
-    # except HTTPException:
-    #     raise
-    # except Exception as e:
-    #     raise HTTPException(
-    #         status_code=500,
-    #         detail=f"Server error: {str(e)}"
-    #     )
-    # finally:
- 
- 
-    #     if 'temp_path' in locals() and os.path.exists(temp_path):
-    #         os.unlink(temp_path)
+# =============================================================================
+# /predict-skin-defense  — Phase F complete adversarial defense pipeline
+# =============================================================================
+@app.post("/predict-skin-defense")
+async def predict_skin_defense_endpoint(
+    file: UploadFile = File(...),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Full Phase F adversarial defense pipeline.
 
+    Automatically detects whether the image has been attacked (clean, sparse,
+    or dense adversarial attack), routes it to the correct denoiser, then
+    classifies the denoised image with the ViT.
+
+    Pipeline: DenseNet121 detector → [skip | SUNet v1 sparse | SUNet v3] → ViT
+
+    Response includes:
+      - disease / diagnosis / confidence: classification result
+      - route_used: which denoiser was applied
+      - detector_class: 0=Clean, 1=Sparse, 2=Dense
+      - detector_confidence: DenseNet121 routing confidence
+      - pipeline_version: phase_f_v1
+    """
+    temp_path = None
+    try:
+        file_ext = os.path.splitext(file.filename)[1].lower()
+        if file_ext not in {".jpg", ".jpeg", ".png"}:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid file format. Supported: .jpg, .jpeg, .png"
+            )
+
+        logger.info(f"🛡️  Phase F defense request from user: {current_user['email']}")
+        logger.info(f"📁 File: {file.filename}")
+
+        with tempfile.NamedTemporaryFile(delete=False, suffix=file_ext) as temp_file:
+            content = await file.read()
+            temp_file.write(content)
+            temp_path = temp_file.name
+
+        result = predict_skin_defense(temp_path)
+
+        if not result.get("success", False):
+            raise HTTPException(
+                status_code=400,
+                detail=result.get("error", "Defense pipeline prediction failed")
+            )
+
+        # Hide confidence only for sparse/dense routed images.
+        # detector_class: 0 = clean, 1 = sparse, 2 = dense
+        detector_class = result.get("detector_class")
+
+        try:
+            detector_class_int = int(detector_class)
+        except Exception:
+            detector_class_int = None
+
+        route_used = str(result.get("route_used") or "").lower()
+
+        hide_confidence = (
+            detector_class_int in [1, 2]
+            or "sparse" in route_used
+            or "dense" in route_used
+        )
+
+        result["hide_confidence"] = hide_confidence
+        result["hideConfidence"] = hide_confidence
+
+        history_record = {
+            "user_id": current_user["_id"],
+            "prediction": result,
+            "type": "skin_disease",
+            "filename": file.filename,
+            "pipeline": "phase_f",
+            "created_at": datetime.now(timezone.utc)
+        }
+        history_collection.insert_one(history_record)
+
+        logger.info(
+            f"✅ Phase F prediction: {result.get('disease')} | "
+            f"route={result.get('route_used')} | "
+            f"confidence={result.get('confidence', 0):.2%}"
+        )
+
+        return result
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Phase F prediction error: {str(e)}\n{traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"Server error: {str(e)}")
+    finally:
+        if temp_path and os.path.exists(temp_path):
+            os.unlink(temp_path)
+
+
+@app.get("/predict-skin-defense/health")
+async def skin_defense_health():
+    """
+    Health check for the Phase F pipeline.
+    Does NOT load models — safe to call at any time.
+    Returns model file paths and whether models are currently loaded.
+    """
+    status_info = get_pipeline_status()
+    return {
+        "status": "ok",
+        "pipeline": "phase_f_v1",
+        **status_info
+    }
+
+
+# =============================================================================
+# Remaining existing endpoints (unchanged)
+# =============================================================================
 
 @app.post("/save-history")
 async def save_history(
@@ -348,9 +479,9 @@ async def get_dashboard_history(
         # condition per type with robust fallbacks
         if rtype == "diabetes":
             flag = pred.get("diabetes_prediction")
-            risk_level = pred.get("risk_level")  # ← NEW: Use risk_level if available
+            risk_level = pred.get("risk_level")
             
-            if risk_level:  # ← Prefer risk_level field
+            if risk_level:
                 condition = f"Diabetes Risk: {risk_level}"
             elif flag is not None:
                 condition = "Diabetes Risk: High" if bool(flag) else "Diabetes Risk: Low"
@@ -369,55 +500,70 @@ async def get_dashboard_history(
         else:
             condition = primary_name or (f"Medical Assessment (type: {rtype})" if rtype != "unknown" else "Medical Assessment")
 
-        # confidence from multiple possible keys; normalise 0–1 to %
-        conf = pred.get("confidence")  # ← Check new "confidence" field first (0-100 scale)
+        conf = pred.get("confidence")
         if conf is None:
-            # Fallback chain for other prediction types
             conf = (
                 pred.get("probability") 
                 or pred.get("confidence_score") 
-                or pred.get("diabetes_probability")  # ← NEW: Check diabetes_probability
+                or pred.get("diabetes_probability")
                 or pred.get("score") 
                 or 0
             )
         
         try:
             conf = float(conf)
-            # Only convert if it's clearly a 0-1 decimal (not already 0-100)
             if 0 <= conf <= 1:
                 conf *= 100.0
             elif conf > 100:
-                conf = 100.0  # Cap at 100
+                conf = 100.0
             elif conf < 0:
                 conf = 0.0
         except Exception:
             conf = 0.0
 
-        # ← NEW: Extract risk factors for diabetes
         risk_factors = pred.get("risk_factors") or []
         if rtype == "diabetes" and not risk_factors:
-            # Fallback: build a simple risk factor from available data
             risk_factors = []
             if pred.get("diabetes_prediction"):
                 risk_factors.append("High diabetes prediction from model")
         
-        # ← NEW: Extract recommendations
         recommendations = pred.get("recommendations") or []
         if rtype == "diabetes" and not recommendations:
             recommendations = ["Consult your healthcare provider"]
+
+        # Hide confidence in dashboard only for sparse/dense skin-defense routes.
+        detector_class = pred.get("detector_class")
+
+        try:
+            detector_class_int = int(detector_class)
+        except Exception:
+            detector_class_int = None
+
+        route_used = str(pred.get("route_used") or "").lower()
+
+        hide_confidence = (
+            rtype == "skin_disease"
+            and (
+                detector_class_int in [1, 2]
+                or "sparse" in route_used
+                or "dense" in route_used
+            )
+        )
 
         formatted.append({
             "id": str(record.get("_id")),
             "type": rtype,
             "condition": condition,
             "confidence": round(conf, 2),
+            "hide_confidence": hide_confidence,
+            "hideConfidence": hide_confidence,
             "date": _fmt_date(record.get("created_at")),
             "symptoms": pred.get("symptoms") or [],
             "diagnosis": primary_name or "No diagnosis available",
             "treatment": pred.get("treatment") or "Consult your doctor",
             "notes": pred.get("notes") or "No additional notes",
-            "risk_factors": risk_factors,  # ← NEW: Include risk factors
-            "recommendations": recommendations,  # ← NEW: Include recommendations
+            "risk_factors": risk_factors,
+            "recommendations": recommendations,
         })
 
     return formatted
@@ -463,10 +609,7 @@ async def predict_diabetes_endpoint(
     print("🔍 Diabetes prediction request received")
     
     try:
-        # Convert Pydantic model to dict
         input_data = data.dict()
-        
-        # Call the actual prediction function from predict_diabetes.py
         result = predict_diabetes(input_data)
         
         if not result.get("success", False):
@@ -475,7 +618,6 @@ async def predict_diabetes_endpoint(
                 detail=result.get("error", "Diabetes prediction failed")
             )
         
-        # Save to history
         history_record = {
             "user_id": current_user["_id"],
             "prediction": result,
@@ -503,10 +645,7 @@ async def predict_kidney_endpoint(
     logger.info("🔍 Kidney disease prediction request received")
     
     try:
-        # Convert Pydantic model to dict
         input_data = data.dict()
-        
-        # Call the actual prediction function from predict_kidney.py
         result = predict_kidney_disease(input_data)
         
         if not result.get("success", False):
@@ -515,9 +654,7 @@ async def predict_kidney_endpoint(
                 detail=result.get("error", "Kidney disease prediction failed")
             )
         
-        # NORMALIZE BEFORE SAVING
         result = normalize_prediction_response(result, "kidney")
-        # Save to history
         history_record = {
             "user_id": current_user["_id"],
             "prediction": result,
@@ -547,7 +684,6 @@ async def predict_fracture_endpoint(
     Accepts: .jpg, .jpeg, .png, .JPG, .JPEG, .PNG
     """
     try:
-        # Validate file extension
         valid_extensions = ['.jpg', '.jpeg', '.png', '.JPG', '.JPEG', '.PNG']
         file_ext = os.path.splitext(file.filename)[1]
         
@@ -557,11 +693,9 @@ async def predict_fracture_endpoint(
                 detail=f"Invalid file format. Supported formats: {', '.join(valid_extensions)}"
             )
         
-        # Log the request
         logger.info(f"🩻 Fracture detection request from user: {current_user['email']}")
         logger.info(f"📁 File: {file.filename}, Type: {file.content_type}")
         
-        # Save uploaded file temporarily
         with tempfile.NamedTemporaryFile(delete=False, suffix=file_ext) as temp_file:
             content = await file.read()
             temp_file.write(content)
@@ -569,7 +703,6 @@ async def predict_fracture_endpoint(
         
         logger.info(f"💾 Saved temp file: {temp_path}")
         
-        # Perform prediction
         result = predict_fracture(temp_path)
         
         if not result.get("success", False):
@@ -578,7 +711,6 @@ async def predict_fracture_endpoint(
                 detail=result.get("error", "Fracture prediction failed")
             )
         
-        # NORMALIZE BEFORE SAVING
         result = normalize_prediction_response(result, "fracture")
         
         conf_value = float(result.get("confidence", 0))
@@ -588,7 +720,6 @@ async def predict_fracture_endpoint(
             f"(confidence: {conf_percent:.1f}%)"
         )
         
-        # Save to history
         history_record = {
             "user_id": current_user["_id"],
             "prediction": result,
@@ -610,7 +741,6 @@ async def predict_fracture_endpoint(
             detail=f"Server error: {str(e)}"
         )
     finally:
-        # Clean up temporary file
         if 'temp_path' in locals() and os.path.exists(temp_path):
             os.unlink(temp_path)
             logger.info(f"🗑️ Cleaned up temp file")
@@ -622,27 +752,10 @@ async def predict_heart_endpoint(
     data: HeartDiseaseInput,
     current_user: dict = Depends(get_current_user)
 ):
-    """
-    Predict heart disease based on 11 clinical cardiac indicators.
- 
-    Uses CardioTabNet: AdaptiveClinicalFormer + XGBoost + CatBoost + LightGBM ensemble.
-    Trained on IEEE Heart Disease dataset (1190 patients).
-    CV performance: ACC 95.97% | AUC 98.43% | F1 96.20%
- 
-    Required features (11):
-        age, trestbps, chol, thalach, oldpeak, fbs,
-        sex, cp, restecg, exang, slope
- 
-    Note: ca and thal are NOT required — this model uses the IEEE
-    dataset which does not include those Cleveland-specific features.
-    """
     logger.info("❤️ Heart disease prediction request received")
  
     try:
-        # ── 1. Convert Pydantic model to plain dict ───────────────────
         input_data = data.dict()
- 
-        # ── 2. Run prediction ─────────────────────────────────────────
         result = predict_heart_disease(input_data)
  
         if not result.get("success", False):
@@ -657,15 +770,11 @@ async def predict_heart_endpoint(
             f"threshold: {result.get('threshold_used', 'N/A')})"
         )
  
-        # ── 3. Normalize before saving (same as other endpoints) ──────
         result = normalize_prediction_response(result, "heart")
  
-        # ── 4. Ensure threshold_used key survives normalization ───────
-        # normalize_prediction_response may not know this key — guard it
         if "threshold_used" not in result:
-            result["threshold_used"] = 0.415   # fallback to trained value
+            result["threshold_used"] = 0.415
  
-        # ── 5. Save to history (same pattern as all other endpoints) ──
         history_record = {
             "user_id":    current_user["_id"],
             "prediction": result,

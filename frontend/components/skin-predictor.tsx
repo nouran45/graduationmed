@@ -76,9 +76,13 @@ export function SkinPredictor({ onPredictionComplete, onImageUpload, compact = f
       throw new Error('Authentication required. Please log in again.')
     }
 
-    const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'
+const apiUrl = (
+  process.env.NEXT_PUBLIC_API_BASE_URL ||
+  process.env.NEXT_PUBLIC_API_URL ||
+  'http://127.0.0.1:8000'
+).replace(/\/$/, '')
 
-    const response = await fetch(`${apiUrl}/predict`, {
+    const response = await fetch(`${apiUrl}/predict-skin-defense`, {
       method: 'POST',
       body: formData,
       headers: {
@@ -201,7 +205,7 @@ export function SkinPredictor({ onPredictionComplete, onImageUpload, compact = f
           Skin Condition Analysis
         </CardTitle>
         <CardDescription>
-          Upload a clear photo of your skin condition for AI-powered analysis
+          Upload a clear photo of your skin condition for protected AI-powered analysis
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
@@ -256,7 +260,7 @@ export function SkinPredictor({ onPredictionComplete, onImageUpload, compact = f
             {loading ? (
               <>
                 <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                Analyzing Skin Condition...
+                Running Protected Skin Analysis...
               </>
             ) : (
               <>

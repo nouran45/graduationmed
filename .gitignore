@@ -93,6 +93,7 @@ pytorch_model.bin
 backend/vitweights/
 backend/cnnweights/
 backend/xgboostweights/
+backend/skin_defense/
 
 # New Stage E fracture ensemble files
 backend/fracture_stageE/

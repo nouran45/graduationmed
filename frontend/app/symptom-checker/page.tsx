@@ -18,7 +18,7 @@ import { Logo } from "@/components/logo"
 
 export default function SymptomChecker() {
   const router = useRouter()
-  const [activeTab, setActiveTab] = useState("symptoms")
+  const [activeTab, setActiveTab] = useState("photos")
   const [step, setStep] = useState(1)
   const [progress, setProgress] = useState(50)
   const [apiPredictions, setApiPredictions] = useState<any[]>([]);
@@ -27,11 +27,12 @@ export default function SymptomChecker() {
       setStep(step + 1);
       setProgress((step + 1) * 50);
     } else {
-      // Create URL with query params
-      const params = new URLSearchParams();
-      params.set('predictions', JSON.stringify(apiPredictions));
-      
-      router.push(`/symptom-checker/results?${params.toString()}`);
+      if (apiPredictions.length > 0) {
+        sessionStorage.setItem("skinAnalysisResults", JSON.stringify(apiPredictions))
+        localStorage.setItem("predictions", JSON.stringify(apiPredictions))
+      }
+
+      router.push("/symptom-checker/results")
     }
   };
 
@@ -107,7 +108,7 @@ export default function SymptomChecker() {
           </h1>
           <p className="text-gray-600 max-w-[700px]">
             {step === 1 &&
-              "Please provide information about your symptoms or upload photos to help identify potential conditions."}
+              "Upload a clear skin photo for protected AI analysis, or describe symptoms manually if you prefer."}
             {step === 2 && "Just a few more details to help us provide more accurate results."}
           </p>
         </div>

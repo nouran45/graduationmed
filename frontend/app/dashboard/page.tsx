@@ -20,6 +20,8 @@ type MedicalRecord = {
   treatment?: string;
   notes?: string;
   confidence?: number;      // 0..1 optional
+  hideConfidence?: boolean;
+  hide_confidence?: boolean;
 };
 
 // 1) Optional manual override via env (wins if set)
@@ -130,7 +132,19 @@ export default function DashboardPage() {
               treatment: r.treatment ?? r.plan ?? "",
               notes: r.notes ?? "",
               confidence: typeof r.confidence === "number" ? r.confidence : undefined,
-            }));
+              hideConfidence: Boolean(
+                r.hide_confidence ||
+                r.hideConfidence ||
+                r.routed_through_attack_retrieval ||
+                r.dense_attack_retrieval ||
+                String(r.route || r.pipeline || r.model_route || r.selected_model || r.analysis_path || "")
+                  .toLowerCase()
+                  .includes("retrieval") ||
+                String(r.route || r.pipeline || r.model_route || r.selected_model || r.analysis_path || "")
+                  .toLowerCase()
+                  .includes("protected")
+              ),
+              hide_confidence: Boolean(r.hide_confidence),            }));
             setRecords(safe);
             ok = true;
             break;
@@ -260,12 +274,13 @@ export default function DashboardPage() {
                       <div>
                         <CardTitle className="text-lg font-medium text-secondary">
                           {record.condition}
-                          {typeof record.confidence === "number" && (
-                            <span className="ml-2 text-sm font-normal text-primary">
-                              ({Math.round(record.confidence)}% confidence)
-
-                            </span>
-                          )}
+                          {typeof record.confidence === "number" &&
+                            !record.hideConfidence &&
+                            !record.hide_confidence && (
+                              <span className="text-primary">
+                                ({Math.round(record.confidence)}% confidence)
+                              </span>
+                            )}
                         </CardTitle>
                         <CardDescription>
                           {[record.date, record.doctor].filter(Boolean).join(" • ")}
