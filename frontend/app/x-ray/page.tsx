@@ -18,17 +18,23 @@ export default function XRayPrediction() {
   const [image, setImage] = useState<string | null>(null)
   const [prediction, setPrediction] = useState<any>(null)
 
-  const handleNext = () => {
-    if (step < 2) {
-      setStep(step + 1)
-      setProgress((step + 1) * 50)
-    } else {
-      if (prediction) {
-        sessionStorage.setItem('xrayResults', JSON.stringify(prediction))
-        router.push('/x-ray/results')
-      }
+const handleNext = () => {
+  if (step < 2) {
+    setStep(step + 1)
+    setProgress((step + 1) * 50)
+  } else {
+    if (prediction) {
+      sessionStorage.setItem(
+        "xrayResults",
+        JSON.stringify({
+          ...prediction,
+          uploadedImage: image,
+        })
+      )
+      router.push("/x-ray/results")
     }
   }
+}
 
   const handleBack = () => {
     if (step > 1) {
