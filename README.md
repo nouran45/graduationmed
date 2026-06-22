@@ -1,111 +1,116 @@
-# ShifAI: AI-Powered Healthcare Risk Assessment
+# MediCheck: Multi-Module Medical AI Screening Platform
 
-**Team Name:** BioVision  
-**Members:** Nouran Yasser Salama, Nour Atef Elhadidy, Sara Aiman zeitoun 
-**Competition:** Appathon CSE-EJUST Challenge Summer 2025  
-**Supervised by:** Dr. Rami Zweil, CSE Department
-
----
-
-## Code Repository (Mandatory)
-**GitHub:** https://github.com/nouran45/ai-contest-bioVision 
-
-This repository contains the **full, complete, and functional source code** for the ShifAI application (backend + frontend + ML assets).
-
-- **Content** 
-- Detailed **setup, build, and run** instructions for both backend and frontend.  
-- All required **dependencies and environment** steps.  
-- A concise **features overview**.  
-- A detailed **Generative AI Usage Log** with: task, tool used, prompt(s), response summary, and reflection on impact.  
-- **License** information (MIT).
+**Graduation Project:** AI-Powered Medical Risk Assessment and Image-Based Screening Platform
+**Repository:** https://github.com/nouran45/graduationmed
+**Technology Stack:** FastAPI, Next.js, MongoDB Atlas, PyTorch, TensorFlow/Keras, scikit-learn
+**Project Type:** Graduation thesis / medical AI decision-support platform
 
 ---
 
 ## Project Overview
 
-ShifAI is a comprehensive, multi‑disease AI healthcare platform combining machine learning, medical imaging analysis, and clinician‑aligned decision support to enable early risk assessment for noncommunicable diseases (NCDs). The system integrates laboratory data, X‑ray imaging, and dermatological image analysis to provide interpretable, confidence‑based predictions for patients and healthcare professionals.
+MediCheck is a full-stack medical AI platform developed as a graduation project to support early screening and risk assessment across multiple clinical domains. The system integrates tabular clinical data, lifestyle-based screening inputs, X-ray images, and dermatology images into a unified web application.
 
-### Key Features
-- **Multi‑Disease Prediction:** Diabetes, CKD, heart disease, anemia, and X‑ray fracture detection.  
-- **Multi‑Modal Analysis:** Tabular lab data, medical X‑ray images, and dermatology photos.  
-- **AI Symptom Chatbot:** Conversational assistant for symptom collection and preliminary triage.  
-- **Clinician Collaboration:** Confidence‑based deferral to human expert (CoDoC‑inspired).  
-- **Explainable AI:** Grad‑CAM heatmaps and confidence scores.  
-- **Secure User Management:** JWT auth, hashed passwords, privacy‑conscious storage.  
-- **Real‑Time Dashboard:** History tracking and results visualisation.  
-- **Responsive UI:** Next.js + Tailwind (mobile‑friendly).
+The platform is designed as an **AI-assisted screening tool**, not as a replacement for physicians, radiologists, or clinical diagnosis. Each module provides a structured prediction, confidence score, clinical interpretation, and recommended next step where applicable.
 
----
+**Components:**
 
-## Live Demo
-- **Frontend (Vercel):** _add your Vercel URL here_  
-- **Backend API:** _add your public FastAPI URL here_  
+* DenseNet121 attack detector
+* SUNet sparse denoiser
+* SUNet v3 dense denoiser
+* ViT-Base/16 skin classifier
 
-> For judges: demo credentials can be provided upon request.
+**Reported Recovery Results:**
+
+* 1-pixel sparse attack recovery: 98.80%
+* 2-pixel sparse attack recovery: 100%
+* FGSM recovery: 99.67%
+* PGD recovery: 98.83%
+
+**Frontend Behavior:**
+For clean images, the system may show confidence.
+For sparse/dense adversarial routes, confidence may be hidden to avoid misleading interpretation after defensive preprocessing.
 
 ---
 
 ## Technology Stack
 
 ### Backend
-- **Framework:** FastAPI (Python 3.11)  
-- **Database:** MongoDB Atlas  
-- **Auth:** JWT (HS256), bcrypt hashing  
-- **Deploy:** Docker, (AWS EC2/GCP VM), Uvicorn/Gunicorn  
-- **ML:** XGBoost, scikit‑learn, TensorFlow/Keras, (optionally PyTorch)
+
+* Python 3.11
+* FastAPI
+* Uvicorn
+* MongoDB Atlas
+* PyMongo
+* JWT authentication
+* Passlib / bcrypt
+* PyTorch
+* TensorFlow / Keras
+* timm
+* scikit-learn
+* joblib
+* NumPy / Pandas
 
 ### Frontend
-- **Framework:** Next.js 14 (App Router)  
-- **Styling:** Tailwind CSS + shadcn/ui, Lucide icons  
-- **State:** React hooks, fetch wrappers  
-- **Deploy:** Vercel
 
-### Machine Learning
-- **Tabular:** XGBoost/scikit‑learn (Diabetes, Heart, CKD, Anemia)  
-- **X‑ray:** EfficientNet‑B0 CNN (`cnnweights/best_transfer_model_local.h5`)  
-- **Dermatology:** ViT / EfficientNet variants (`vitweights/*`)  
-- **Chatbot:** LLM‑based symptom assistant  
-- **Augmentation:** Albumentations / tf.image  
-- **Datasets:** HAM10000, ISIC, Kaggle derm sets, (optionally MIMIC‑CXR)
+* Next.js App Router
+* React
+* TypeScript
+* Tailwind CSS
+* shadcn/ui
+* Lucide React icons
+* Fetch API for backend communication
+
+### Database and Authentication
+
+* MongoDB Atlas for users and prediction history
+* JWT access tokens
+* Hashed passwords
+* Protected prediction endpoints
+* Dashboard history retrieval
 
 ---
 
 ## Project Structure
-```
-ai-contest-bioVision/
+
+```text
+graduationmed/
 ├── backend/
-│   ├── app.py                    # FastAPI entrypoint
-│   ├── auth.py                   # JWT + password hashing
-│   ├── models.py                 # Pydantic schemas
-│   ├── requirements.txt          # Python deps
+│   ├── app.py
+│   ├── models.py
+│   ├── requirements.txt
+│   ├── .env.example
 │   ├── utils/
-│   │   ├── predict.py            # Skin disease inference
-│   │   ├── predict_diabetes.py   # Diabetes inference
-│   │   ├── predict_kidney.py     # CKD inference
-│   │   ├── predict_heart.py      # Heart inference
-│   │   ├── predict_anemia.py     # Anemia inference
-│   │   ├── predict_fracture.py   # X‑ray fracture inference
-│   │   ├── chatbot.py            # Symptom chatbot
-│   │   └── normalize.py          # Preprocessing helpers
-│   ├── vitweights/               # ViT weights
-│   ├── cnnweights/               # CNN weights
-│   └── xgboostweights/           # XGBoost models
+│   │   ├── predict.py
+│   │   ├── predict_diabetes.py
+│   │   ├── predict_kidney.py
+│   │   ├── predict_heart.py
+│   │   ├── predict_fracture.py
+│   │   ├── predict_skin_defense.py
+│   │   └── normalize.py
+│   ├── diabetes_model/
+│   ├── kidney_phase6/
+│   ├── fracture_stageE/
+│   └── skin_defense/
 │
 ├── frontend/
 │   ├── app/
-│   │   ├── page.tsx              # Landing
-│   │   ├── layout.tsx            # Root layout
-│   │   ├── login/page.tsx
-│   │   ├── signup/page.tsx
-│   │   ├── dashboard/            # History & cards
+│   │   ├── page.tsx
+│   │   ├── login/
+│   │   ├── signup/
+│   │   ├── dashboard/
 │   │   ├── diabetes-prediction/
 │   │   ├── kidney-prediction/
 │   │   ├── heart-assessment/
-│   │   ├── anemia-prediction/
 │   │   ├── x-ray/
-│   │   ├── health-chat/
+│   │   ├── skin-checker/
 │   │   └── symptom-checker/
 │   ├── components/
+│   │   ├── diabetes-risk-predictor.tsx
+│   │   ├── kidney-disease-predictor.tsx
+│   │   ├── heart-disease-predictor.tsx
+│   │   ├── x-ray-predictor.tsx
+│   │   └── skin-predictor.tsx
 │   ├── lib/
 │   └── package.json
 │
@@ -115,223 +120,164 @@ ai-contest-bioVision/
 
 ---
 
-## Setup & Installation
+## Backend Setup
 
-### Prerequisites
-- **Python 3.11+**, **Node.js 18+**, **Git**
-- MongoDB Atlas account (or local MongoDB)
+### 1. Clone the Repository
 
-### Backend Setup
 ```bash
-git clone https://github.com/nouran45/ai-contest-bioVision.git
-cd ai-contest-bioVision/backend
+git clone https://github.com/nouran45/graduationmed.git
+cd graduationmed/backend
+```
 
-# Create & activate venv
-# Windows (PowerShell)
-py -3.11 -m venv .venv && .\.venv\Scripts\Activate.ps1
-# macOS/Linux
-python3.11 -m venv .venv && source .venv/bin/activate
+### 2. Create and Activate Virtual Environment
 
+For Windows PowerShell:
+
+```powershell
+python -m venv venv
+.\venv\Scripts\activate
+```
+
+For macOS/Linux:
+
+```bash
+python3 -m venv venv
+source venv/bin/activate
+```
+
+### 3. Install Dependencies
+
+```bash
+pip install --upgrade pip
 pip install -r requirements.txt
-
-# .env (create backend/.env)
-# MONGO_URI=...
-# SECRET_KEY=...
-# (optional) CORS_ORIGINS='["http://localhost:3000"]'
-
-uvicorn app:app --reload --host 0.0.0.0 --port 8000
-# Backend on http://127.0.0.1:8000
 ```
 
-#### Version Pinning Tip
-If models were saved with `scikit-learn==1.2.2`, pin the same:
-```
-scikit-learn==1.2.2
-xgboost==3.0.5
-numpy==2.1.3
+
+
+### 5. Run Backend
+
+```bash
+python -m uvicorn app:app --reload
 ```
 
-### Frontend Setup
+Backend will run at:
+
+```text
+http://127.0.0.1:8000
+```
+
+Swagger API documentation:
+
+```text
+http://127.0.0.1:8000/docs
+```
+
+---
+
+## Frontend Setup
+
+### 1. Go to Frontend Folder
+
 ```bash
 cd ../frontend
-pnpm install   # or npm/yarn
-# .env.local
-# NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:8000
-pnpm dev       # http://localhost:3000
 ```
 
-### Quick Test
-```powershell
-# Login and call a protected route (Windows PowerShell)
-$resp = Invoke-RestMethod -Uri "http://127.0.0.1:8000/login" -Method POST -ContentType "application/json" -Body '{"email":"testuser@example.com","password":"testpassword123"}'
-$token = $resp.access_token
-Invoke-RestMethod -Uri "http://127.0.0.1:8000/users/me" -Headers @{Authorization="Bearer $token"}
+### 2. Install Dependencies
+
+```bash
+npm install
+```
+
+### 3. Configure Frontend Environment
+
+Create `.env.local` inside the `frontend/` folder.
+
+```env
+NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:8000
+```
+
+### 4. Run Frontend
+
+```bash
+npm run dev
+```
+
+Frontend will run at:
+
+```text
+http://localhost:3000
 ```
 
 ---
 
-## API Summary
+## Model Summary
 
-### Auth
-- **POST /register** – create user  
-- **POST /login** – returns JWT access token  
-- **GET /verify-token** – verify token  
-- **GET /users/me** – current user
-
-### Predictions
-- **POST /predict** – Skin disease (multipart `file`)  
-- **POST /predict-diabetes** – Diabetes (JSON)  
-- **POST /predict-kidney** – CKD (JSON)  
-- **POST /predict-heart** – Heart disease (JSON)  
-- **POST /predict-anemia** – Anemia (JSON)  
-- **POST /predict-fracture** – X‑ray fracture (multipart `file`)
-
-### History
-- **GET /history** – raw history  
-- **GET /dashboard-history** – formatted cards
-
-### Chatbot
-- **POST /chat** – symptom assistant  
-- **GET /chat-history** – conversation log
+| Module        | Final Model                              | Main Dataset / Input                        | Main Thesis Result                                      |
+| ------------- | ---------------------------------------- | ------------------------------------------- | ------------------------------------------------------- |
+| Diabetes      | Transfer-NAMI                            | BRFSS 2016–2023                             | AUC around 0.805 on 2023 held-out cohort                |
+| Kidney        | Phase 6 Focal FT-Transformer             | 2,059 clinical records                      | 100% recall, 91.0% AUROC                                |
+| Heart         | ACF-Net                                  | IEEE merged heart dataset + external CVD    | 96.14% accuracy, 98.45% AUROC                           |
+| Bone Fracture | Stage E EfficientNetB0 + Swin-T ensemble | 506-image held-out X-ray test set           | 99.01% accuracy, 0.9968 AUC                             |
+| Skin Defense  | Phase F DenseNet121 + SUNet + ViT        | Dermatology images with adversarial attacks | 98.80–100% sparse recovery; 98.83–99.67% dense recovery |
 
 ---
 
-## Model Metrics (Illustrative)
-| Disease | Model | Accuracy | Precision | Recall | ROC AUC |
-|--------:|------:|---------:|----------:|-------:|--------:|
-| Anemia | XGBoost | 1.00 | 1.00 | 1.00 | 1.00 |
-| Heart | XGBoost | 0.966 | 0.97 | 0.97 | 0.998 |
-| Diabetes | XGBoost | 0.97 | 0.97 | 0.82 | 0.98 |
-| CKD | Ensemble | 0.964 | 0.96 | 0.96 | 0.96 |
-| X‑ray | EffNet‑B0 | 0.99 | 0.99 | 1.00 | — |
-| Skin (8‑class) | ViT | 0.9738 | 0.97 | 0.97 | — |
+## Medical Disclaimer
 
+This platform is intended for educational and research purposes as part of a graduation project. It is an AI-assisted screening system and must not be used as a standalone diagnostic tool.
 
+Predictions should always be interpreted by qualified healthcare professionals. Positive or uncertain predictions require clinical confirmation, laboratory testing, radiology review, or specialist assessment depending on the module.
 
 ---
 
-## Generative AI Usage Log (Crucial)
+## Known Limitations
 
-For each significant instance, we include **Task**, **Tool**, **Prompt(s)**, **AI Response (summary)**, and **Impact**.
-
-### 1) Model Architecture Comparison & Feature Engineering
-- **Tools:** ChatGPT‑4, Blackbox AI  
-- **Prompt(s):**  
-  - “Compare EfficientNet vs ViT for 8‑class skin disease with 224×224 inputs; prioritise interpretability and latency.”  
-  - “Rank lab features for CKD risk; propose imputation + scaling.”  
-- **AI Response (summary):** Recommended EffNet‑B0 baseline with Grad‑CAM; ViT as follow‑up; suggested robust scaling + targeted imputation.  
-- **Impact:** Saved ~8–10h research; established reproducible baseline.
-
-### 2) Hyperparameter Optimisation & Training Strategy
-- **Tools:** Claude, ChatGPT‑4, Blackbox AI  
-- **Prompt(s):**  
-  - “Design CV + early stopping for imbalanced medical data; give parameter ranges for XGBoost.”  
-- **AI Response (summary):** Class‑weights, early stopping 15–25 rounds, learning‑rate decay; k‑fold stratified CV.  
-- **Impact:** +5–8% validation accuracy; ~12h saved.
-
-### 3) Backend API Design & FastAPI Implementation
-- **Tools:** Copilot, DeepSeek, Claude  
-- **Prompt(s):**  
-  - “Scaffold FastAPI endpoints with JWT auth and MongoDB; add error handling.”  
-- **AI Response (summary):** Generated boilerplate; async patterns; refined JWT & CORS hardening.  
-- **Impact:** ~40–45% backend time reduction; security issues avoided early.
-
-### 4) Data Quality & Preprocessing
-- **Tools:** Claude, ChatGPT‑4, DeepSeek  
-- **Prompt(s):**  
-  - “Imputation strategy for mixed clinical features; preserve clinical ranges.”  
-- **AI Response (summary):** Domain‑aware imputers; robust scaling; unit harmonisation.  
-- **Impact:** +6–8% reliability; ~5–6h saved.
-
-### 5) Health Chatbot & Prompting
-- **Tools:** Claude, ChatGPT‑4, DeepSeek  
-- **Prompt(s):**  
-  - “Draft safe triage prompts with red‑flag escalation.”  
-- **AI Response (summary):** Structured questioning; disclaimers; escalation rules.  
-- **Impact:** Safer triage; better engagement.
-
-### 6) Heart & Anemia Integration
-- **Tools:** Blackbox AI, ChatGPT‑4, Claude  
-- **Prompt(s):**  
-  - “Minimal input schema for heart risk; map to model features.”  
-- **AI Response (summary):** Feature mapping templates; thresholds & caveats.  
-- **Impact:** ~30% faster module integration.
-
-### 7) Testing & QA
-- **Tools:** ChatGPT‑4, Blackbox AI, Claude  
-- **Prompt(s):**  
-  - “Generate synthetic yet realistic lab panels; enumerate edge cases.”  
-- **AI Response (summary):** Test matrices; extreme‑value safety tests.  
-- **Impact:** Hidden failure modes caught pre‑deploy.
-
-### 8) Security & Compliance
-- **Tools:** Claude, ChatGPT‑4, DeepSeek  
-- **Prompt(s):**  
-  - “HIPAA/GDPR checklist for FastAPI + MongoDB + JWT; minimal implementation.”  
-- **AI Response (summary):** Threat model, audit logging, secure secrets, RBAC.  
-- **Impact:** Regulatory risks mitigated.
-
-### 9) Documentation & UX Copy
-- **Tools:** Claude, ChatGPT‑4, Blackbox AI  
-- **Prompt(s):**  
-  - “Write patient‑facing explanation for confidence scores and next steps.”  
-- **AI Response (summary):** Clear copy; consistent terminology.  
-- **Impact:** Faster onboarding; fewer support questions.
-
-### 10) Debugging Integration (Label/Prob Inversion)
-- **Tools:** DeepSeek, Claude, Blackbox AI  
-- **Prompt(s):**  
-  - “Trace label mapping from training to UI; locate inversion source.”  
-- **AI Response (summary):** Diff training class order vs UI indices; patch mapping.  
-- **Impact:** Fixed critical correctness bug; prevented recurrence.
-
-### 11) Performance Optimisation
-- **Tools:** DeepSeek, Blackbox AI, ChatGPT‑4  
-- **Prompt(s):**  
-  - “Reduce inference latency; advise caching/quantisation.”  
-- **AI Response (summary):** Async loading, model cache, quantisation, batching.  
-- **Impact:** ~60–70% latency reduction; scalable concurrency.
+* The models are research prototypes and require broader external validation.
+* The kidney module prioritizes recall, which may increase false positives.
+* The diabetes module has limited recall compared with ideal clinical screening targets.
+* The X-ray model was evaluated on an internal held-out test set and still requires real-world radiology validation.
+* The skin defense pipeline improves robustness against selected adversarial attacks but does not guarantee security against all attack types.
+* The system depends on correct model assets being placed in the expected backend folders.
 
 ---
 
-## Challenges & Solutions
-1. **Label Consistency:** Embed class metadata in model; validate at load.  
-2. **Latency under Load:** Async inference + caching + load balancing.  
-3. **Class Imbalance:** SMOTE, class‑weighted loss, stratified CV.  
-4. **Version Conflicts:** Docker + pinned deps, or re‑export models.  
-5. **Overfitting (Images):** Augmentations (MixUp/CutMix), regularisation, ensembles.
+## Git Workflow for Team Updates
 
----
+### Fetch and Pull Latest Main
 
-## Compliance & Security
-- JWT (120‑min expiry), bcrypt hashing.  
-- HTTPS/TLS; encryption at rest where applicable.  
-- GDPR/HIPAA‑aligned logging & retention.  
-- RBAC with least privilege; MongoDB Atlas security best practices.  
-- Dockerised deploy with minimal attack surface.
+```bash
+git fetch origin
+git switch main
+git pull --ff-only origin main
+```
 
----
+### Create a Feature Branch
 
-## Future Enhancements
-- Mobile app, offline fallbacks.  
-- Wearable integration & streaming vitals.  
-- Multi‑language & voice UI.  
-- Federated learning for privacy.  
-- Clinician XAI dashboard.  
-- EHR/EMR integration.
+```bash
+git switch -c feature/your-feature-name
+```
+
+### Commit Frontend or Backend Changes
+
+```bash
+git status
+git add path/to/changed-file
+git commit -m "Describe your change"
+git push -u origin feature/your-feature-name
+```
+
+Then open a Pull Request on GitHub and merge into `main` after review.
 
 ---
 
 ## License
-This project is licensed under the **MIT License**. See the [LICENSE](./LICENSE) file for details.
 
-
+This repository is part of an academic graduation project. Add the final license according to the team/supervisor requirements.
 
 ---
 
 ## Contact
-**BioVision Team**  
-Nouran Yasser Salama • Nour Atef Elhadidy • Sara Aiman Zeitoun  
-**Supervisor:** Dr. Rami Zweil, CSE, EJUST
 
-**Last Updated:** January 2025 • **Version:** 1.0.0
+For project-related questions, contact the graduation project team or repository maintainers.
+
+**Repository:** https://github.com/nouran45/graduationmed
