@@ -26,6 +26,9 @@ db = client["database"]
 users = db["users"]
 history_collection = db["history"]
 
+# Person 3 collections
+prescriptions_collection = db["prescriptions"]
+
 
 # Person 4 collections
 inventory_collection = db["inventory"]
