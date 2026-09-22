@@ -91,72 +91,16 @@ const API_BASE = (
   "http://127.0.0.1:8000"
 ).replace(/\/$/, "");
 
-const MOCK_DELAY_MS = 400;
+
 const DEMO_PATIENT_ID = "demo-patient-001";
 const DEMO_BRANCH_ID = "demo-branch-001";
-
-function wait(milliseconds = MOCK_DELAY_MS): Promise<void> {
-  return new Promise((resolve) => {
-    setTimeout(resolve, milliseconds);
-  });
-}
+const DEMO_PHARMACIST_ID = "demo-pharmacist-001";
 
 
 
-const initialTime = new Date().toISOString();
 
-const mockPrescriptions: PrescriptionResponse[] = [
-  {
-    prescription_id: "prescription-demo-001",
-    patient_id: DEMO_PATIENT_ID,
-    branch_id: DEMO_BRANCH_ID,
 
-    status: "pending_review",
-    ocr_status: "draft_ready",
 
-    file: {
-      original_name: "sample-prescription.jpg",
-      content_type: "image/jpeg",
-      size_bytes: 245000,
-    },
-
-    ocr_items: [
-      {
-        line_id: "line-001",
-        raw_text: "Amoxcillin 500 mg cap three times daily",
-        extracted_name: "Amoxcillin",
-        strength: "500 mg",
-        dosage_form: "capsule",
-        directions: "three times daily",
-        quantity: 21,
-        confidence: 0.78,
-        matched_medication_id: null,
-        match_status: "possible",
-      },
-      {
-        line_id: "line-002",
-        raw_text: "Paracetamol 500 mg when needed",
-        extracted_name: "Paracetamol",
-        strength: "500 mg",
-        dosage_form: "tablet",
-        directions: "when needed",
-        quantity: null,
-        confidence: 0.93,
-        matched_medication_id: "demo-medication-002",
-        match_status: "matched",
-      },
-    ],
-
-    reviewed_items: [],
-
-    reviewed_by: null,
-    review_notes: null,
-    reviewed_at: null,
-
-    created_at: initialTime,
-    updated_at: initialTime,
-  },
-];
 
 export async function uploadPrescription(
   file: File,
@@ -257,66 +201,125 @@ export async function getPrescription(
 export async function getPharmacyPrescriptionQueue(
   branchId: string,
 ): Promise<PrescriptionResponse[]> {
-  await wait();
+  const response = await fetch(
+    `${API_BASE}/api/prescriptions/pharmacy/queue`,
+    {
+      method: "GET",
 
-  return mockPrescriptions.filter(
-    (item) =>
-      item.branch_id === branchId &&
-      item.status === "pending_review",
+      headers: {
+        "X-Branch-ID": branchId,
+      },
+
+      cache: "no-store",
+    },
   );
+
+  if (!response.ok) {
+    let message =
+      "The prescription queue could not be loaded.";
+
+    try {
+      const errorBody = await response.json();
+
+      if (
+        typeof errorBody?.detail === "string"
+      ) {
+        message = errorBody.detail;
+      }
+    } catch {
+      // Keep default message.
+    }
+
+    throw new Error(message);
+  }
+
+  return response.json();
 }
+
+export async function getPharmacyPrescription(
+  prescriptionId: string,
+  branchId: string,
+): Promise<PrescriptionResponse> {
+  const response = await fetch(
+    `${API_BASE}/api/prescriptions/pharmacy/${encodeURIComponent(
+      prescriptionId,
+    )}`,
+    {
+      method: "GET",
+
+      headers: {
+        "X-Branch-ID": branchId,
+      },
+
+      cache: "no-store",
+    },
+  );
+
+  if (!response.ok) {
+    let message =
+      "The prescription could not be loaded.";
+
+    try {
+      const errorBody = await response.json();
+
+      if (
+        typeof errorBody?.detail === "string"
+      ) {
+        message = errorBody.detail;
+      }
+    } catch {
+      // Keep default message.
+    }
+
+    throw new Error(message);
+  }
+
+  return response.json();
+}
+
 
 export async function reviewPrescription(
   prescriptionId: string,
+  branchId: string,
   request: PrescriptionReviewRequest,
 ): Promise<PrescriptionResponse> {
-  await wait();
+  const response = await fetch(
+    `${API_BASE}/api/prescriptions/${encodeURIComponent(
+      prescriptionId,
+    )}/review`,
+    {
+      method: "POST",
 
-  const prescriptionIndex = mockPrescriptions.findIndex(
-    (item) => item.prescription_id === prescriptionId,
+      headers: {
+        "Content-Type": "application/json",
+        "X-Branch-ID": branchId,
+        "X-Actor-ID": DEMO_PHARMACIST_ID,
+      },
+
+      body: JSON.stringify(request),
+    },
   );
 
-  if (prescriptionIndex === -1) {
-    throw new Error("Prescription not found.");
+  if (!response.ok) {
+    let message =
+      "The prescription review could not be saved.";
+
+    try {
+      const errorBody = await response.json();
+
+      if (
+        typeof errorBody?.detail === "string"
+      ) {
+        message = errorBody.detail;
+      }
+    } catch {
+      // Keep default message.
+    }
+
+    throw new Error(message);
   }
 
-  if (
-    request.decision === "approve" &&
-    request.reviewed_items.length === 0
-  ) {
-    throw new Error(
-      "At least one reviewed medication is required for approval.",
-    );
-  }
-
-  const currentPrescription =
-    mockPrescriptions[prescriptionIndex];
-
-  const now = new Date().toISOString();
-
-  const reviewedPrescription: PrescriptionResponse = {
-    ...currentPrescription,
-
-    status:
-      request.decision === "approve"
-        ? "reviewed"
-        : "rejected",
-
-    reviewed_items:
-      request.decision === "approve"
-        ? request.reviewed_items
-        : [],
-
-    reviewed_by: "demo-pharmacist-001",
-    review_notes: request.review_notes,
-    reviewed_at: now,
-    updated_at: now,
-  };
-
-  mockPrescriptions[prescriptionIndex] =
-    reviewedPrescription;
-
-  return reviewedPrescription;
+  return response.json();
 }
 
 export { DEMO_BRANCH_ID };

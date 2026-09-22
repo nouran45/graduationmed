@@ -1,12 +1,14 @@
 from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
-
+from pymongo import ReturnDocument
 from database import prescriptions_collection
 from schemas.prescription import (
     MatchStatus,
     OCRStatus,
+    PrescriptionReviewRequest,
     PrescriptionStatus,
+    ReviewDecision,
 )
 
 
@@ -242,3 +244,93 @@ def get_prescription(
     return _serialize_prescription(
         document
     )
+
+def get_prescription_for_branch(
+    prescription_id: str,
+    branch_id: str,
+) -> dict | None:
+    document = prescriptions_collection.find_one(
+        {
+            "prescription_id": prescription_id,
+            "branch_id": branch_id,
+        }
+    )
+
+    return _serialize_prescription(
+        document
+    )
+
+
+# =========================================================
+# PHARMACY PRESCRIPTION QUEUE
+# =========================================================
+
+def list_pending_prescriptions(
+    branch_id: str,
+) -> list[dict]:
+    documents = prescriptions_collection.find(
+        {
+            "branch_id": branch_id,
+            "status": PrescriptionStatus.PENDING_REVIEW.value,
+        }
+    ).sort("created_at", 1)
+
+    return [
+        _serialize_prescription(document)
+        for document in documents
+    ]
+
+
+# =========================================================
+# PHARMACIST REVIEW
+# =========================================================
+
+def review_prescription(
+    *,
+    prescription_id: str,
+    branch_id: str,
+    pharmacist_id: str,
+    request: PrescriptionReviewRequest,
+) -> dict | None:
+    if (
+        request.decision == ReviewDecision.APPROVE
+        and not request.reviewed_items
+    ):
+        raise ValueError(
+            "At least one reviewed medication is required "
+            "for approval."
+        )
+
+    now = _utc_now()
+
+    if request.decision == ReviewDecision.APPROVE:
+        new_status = PrescriptionStatus.REVIEWED.value
+
+        reviewed_items = [
+            item.model_dump()
+            for item in request.reviewed_items
+        ]
+    else:
+        new_status = PrescriptionStatus.REJECTED.value
+        reviewed_items = []
+
+    updated = prescriptions_collection.find_one_and_update(
+        {
+            "prescription_id": prescription_id,
+            "branch_id": branch_id,
+            "status": PrescriptionStatus.PENDING_REVIEW.value,
+        },
+        {
+            "$set": {
+                "status": new_status,
+                "reviewed_items": reviewed_items,
+                "reviewed_by": pharmacist_id,
+                "review_notes": request.review_notes,
+                "reviewed_at": now,
+                "updated_at": now,
+            }
+        },
+        return_document=ReturnDocument.AFTER,
+    )
+
+    return _serialize_prescription(updated)
