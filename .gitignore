@@ -178,3 +178,5 @@ frontend/node_modules/
 __pycache__/
 *.pyc
 *.zip
+# Private prescription uploads
+backend/private_uploads/

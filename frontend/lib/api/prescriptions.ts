@@ -86,6 +86,11 @@ export interface PrescriptionResponse {
   updated_at: ISODateTime;
 }
 
+const API_BASE = (
+  process.env.NEXT_PUBLIC_API_BASE_URL ||
+  "http://127.0.0.1:8000"
+).replace(/\/$/, "");
+
 const MOCK_DELAY_MS = 400;
 const DEMO_PATIENT_ID = "demo-patient-001";
 const DEMO_BRANCH_ID = "demo-branch-001";
@@ -96,11 +101,7 @@ function wait(milliseconds = MOCK_DELAY_MS): Promise<void> {
   });
 }
 
-function createMockId(): string {
-  return `prescription-${Date.now()}-${Math.random()
-    .toString(36)
-    .slice(2, 8)}`;
-}
+
 
 const initialTime = new Date().toISOString();
 
@@ -175,69 +176,83 @@ export async function uploadPrescription(
     throw new Error("Only JPG, PNG and PDF files are supported.");
   }
 
-  await wait();
+  const formData = new FormData();
+  formData.append("file", file);
 
-  const now = new Date().toISOString();
+  const response = await fetch(
+    `${API_BASE}/api/prescriptions`,
+    {
+      method: "POST",
 
-  const uploadedPrescription: PrescriptionResponse = {
-    prescription_id: createMockId(),
-    patient_id: DEMO_PATIENT_ID,
-    branch_id: branchId,
-
-    status: "pending_review",
-    ocr_status: "draft_ready",
-
-    file: {
-      original_name: file.name,
-      content_type: file.type,
-      size_bytes: file.size,
-    },
-
-    ocr_items: [
-      {
-        line_id: "line-001",
-        raw_text: "Amoxcillin 500 mg cap three times daily",
-        extracted_name: "Amoxcillin",
-        strength: "500 mg",
-        dosage_form: "capsule",
-        directions: "three times daily",
-        quantity: 21,
-        confidence: 0.78,
-        matched_medication_id: null,
-        match_status: "possible",
+      headers: {
+        "X-Patient-ID": DEMO_PATIENT_ID,
+        "X-Branch-ID": branchId,
       },
-    ],
 
-    reviewed_items: [],
+      body: formData,
+    },
+  );
 
-    reviewed_by: null,
-    review_notes: null,
-    reviewed_at: null,
+  if (!response.ok) {
+    let message = "The prescription could not be uploaded.";
 
-    created_at: now,
-    updated_at: now,
-  };
+    try {
+      const errorBody = await response.json();
 
-  mockPrescriptions.unshift(uploadedPrescription);
+      if (
+        typeof errorBody?.detail === "string"
+      ) {
+        message = errorBody.detail;
+      }
+    } catch {
+      // Keep default message.
+    }
 
-  return uploadedPrescription;
+    throw new Error(message);
+  }
+
+  return response.json();
 }
 
 export async function getPrescription(
   prescriptionId: string,
 ): Promise<PrescriptionResponse> {
-  await wait();
+  const response = await fetch(
+    `${API_BASE}/api/prescriptions/${encodeURIComponent(
+      prescriptionId,
+    )}`,
+    {
+      method: "GET",
 
-  const prescription = mockPrescriptions.find(
-    (item) => item.prescription_id === prescriptionId,
+      headers: {
+        "X-Patient-ID": DEMO_PATIENT_ID,
+      },
+
+      cache: "no-store",
+    },
   );
 
-  if (!prescription) {
-    throw new Error("Prescription not found.");
+  if (!response.ok) {
+    let message = "Prescription not found.";
+
+    try {
+      const errorBody = await response.json();
+
+      if (
+        typeof errorBody?.detail === "string"
+      ) {
+        message = errorBody.detail;
+      }
+    } catch {
+      // Keep default message.
+    }
+
+    throw new Error(message);
   }
 
-  return prescription;
+  return response.json();
 }
+
 
 export async function getPharmacyPrescriptionQueue(
   branchId: string,
@@ -274,7 +289,9 @@ export async function reviewPrescription(
     );
   }
 
-  const currentPrescription = mockPrescriptions[prescriptionIndex];
+  const currentPrescription =
+    mockPrescriptions[prescriptionIndex];
+
   const now = new Date().toISOString();
 
   const reviewedPrescription: PrescriptionResponse = {
@@ -296,7 +313,8 @@ export async function reviewPrescription(
     updated_at: now,
   };
 
-  mockPrescriptions[prescriptionIndex] = reviewedPrescription;
+  mockPrescriptions[prescriptionIndex] =
+    reviewedPrescription;
 
   return reviewedPrescription;
 }
