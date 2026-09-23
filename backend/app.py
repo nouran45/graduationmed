@@ -16,6 +16,10 @@ from typing import List, Dict, Any
 
 from fastapi import HTTPException, Depends
 from typing import List, Dict, Any
+
+from routers.prescriptions import router as prescriptions_router
+
+
 import os
 import logging
 import tempfile
@@ -136,6 +140,9 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
 
 
 # Routes
+
+app.include_router(prescriptions_router)
+
 @app.get("/")
 def home():
     return {"message": "Skin Disease Detection API is running!"}
