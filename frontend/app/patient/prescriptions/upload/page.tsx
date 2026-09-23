@@ -1,5 +1,5 @@
 "use client";
-
+import Link from "next/link";
 import { useRef, useState } from "react";
 import type {
   ChangeEvent,
@@ -445,6 +445,18 @@ export default function PrescriptionUploadPage() {
                   )}
                 </div>
               </div>
+
+            </div>
+            <div className="border-t px-6 py-6">
+
+              <Link
+                href={`/patient/prescriptions/${encodeURIComponent(
+                  result.prescription_id,
+                )}`}
+                className="inline-flex items-center justify-center rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-white transition hover:bg-primary/90"
+              >
+                View prescription status
+              </Link>
 
             </div>
           </section>
