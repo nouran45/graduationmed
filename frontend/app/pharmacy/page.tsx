@@ -1,516 +1,254 @@
 "use client"
 
+import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
-import { useMemo, useState } from "react"
+import { ChevronDown, Clock3, Search, ShieldCheck, Store, Tag } from "lucide-react"
+import { PharmacyShell } from "@/components/pharmacy/shell"
+import { SearchBox } from "@/components/pharmacy/search-box"
+import { ProductRow } from "@/components/pharmacy/product-carousel"
+import { Reveal, MotionStyles } from "@/components/pharmacy/motion"
+import { PharmacyDirectory } from "@/components/pharmacy/pharmacy-directory"
+import { ErrorState } from "@/components/pharmacy/states"
+import { fetchCategories, fetchDiscounts, getKnownPharmacies } from "@/lib/pharmacy/api"
 import {
-    ArrowRight,
-    CheckCircle2,
-    ChevronRight,
-    Clock3,
-    Heart,
-    Search,
-    ShieldCheck,
-    ShoppingBag,
-    Store,
-    Truck,
-} from "lucide-react"
+    categoryIcon, categoryKeyOf, categoryNameOf, friendlyCategory, hue, isRealProduct, sortCategories,
+} from "@/lib/pharmacy/categories"
+import { useAsync, useInView, useProductFeed } from "@/lib/pharmacy/hooks"
+import { groupProducts, savingsPct } from "@/lib/pharmacy/marketplace"
+import type { ApiCategory } from "@/lib/pharmacy/types"
 
-import ProductCard from "@/components/pharmacy/ProductCard"
-import CategoryCard from "@/components/pharmacy/CategoryCard"
+function CategoryRow({ category }: { category: ApiCategory }) {
+    const [ref, seen] = useInView<HTMLDivElement>()
+    const key = categoryKeyOf(category)
+    const feed = useProductFeed({ category_key: key }, 88, seen) // fetched only when scrolled near
+    const products = useMemo(() => feed.groups.filter(isRealProduct), [feed.groups])
+    return (
+        <div ref={ref} className="min-h-[120px]">
+            {seen && (
+                <ProductRow
+                    title={friendlyCategory(categoryNameOf(category))}
+                    subtitle="Compare prices for this category across pharmacies."
+                    href={`/pharmacy/category/${encodeURIComponent(key)}`} hrefLabel="Browse all"
+                    products={products} loading={feed.loading}
+                />
+            )}
+        </div>
+    )
+}
 
-import {
-    pharmacyCategories,
-    pharmacyProducts,
-    searchProducts,
-} from "@/lib/pharmacy/mock-data"
+export default function PharmacyHomePage() {
+    const feed = useProductFeed({}, 176)
+    const categories = useAsync((s) => fetchCategories(undefined, s), "categories")
+    const discounts = useAsync((s) => fetchDiscounts({ limit: 66 }, s), "discounts")
+    const [showAllCats, setShowAllCats] = useState(false)
 
-export default function PharmacyPage() {
-    const [search, setSearch] = useState("")
+    const sample = useMemo(() => feed.groups.filter(isRealProduct), [feed.groups])
+    const topPicks = useMemo(
+        () => sample.filter((p) => p.bestOffer?.price != null).sort((a, b) =>
+            Number(b.availability.status === "in_stock") - Number(a.availability.status === "in_stock") || b.offerCount - a.offerCount),
+        [sample])
+    const saveMore = useMemo(() => sample.filter((p) => p.offerCount > 1 && savingsPct(p) >= 1).sort((a, b) => savingsPct(b) - savingsPct(a)), [sample])
+    const recent = useMemo(() => sample.filter((p) => p.latestSync).sort((a, b) => new Date(b.latestSync!).getTime() - new Date(a.latestSync!).getTime()), [sample])
+    const deals = useMemo(
+        () => groupProducts(discounts.data?.items ?? []).filter((p) => p.maxDiscount && isRealProduct(p)).sort((a, b) => (b.maxDiscount ?? 0) - (a.maxDiscount ?? 0)),
+        [discounts.data])
 
-    const searchResults = useMemo(() => {
-        if (!search.trim()) {
-            return []
-        }
+    const cats = useMemo(() => sortCategories(categories.data ?? []), [categories.data])
 
-        return searchProducts(search).slice(0, 5)
-    }, [search])
+    // Read client-only cache after mount so server and client markup match (avoids hydration errors).
+    const [pharmacyCount, setPharmacyCount] = useState(0)
+    useEffect(() => {
+        setPharmacyCount(getKnownPharmacies().length)
+    }, [feed.items])
 
-    const hotDeals = pharmacyProducts
-        .filter((product) => product.discount)
-        .slice(0, 4)
-
-    const popularProducts = pharmacyProducts.slice(0, 4)
+    const visibleCats = showAllCats ? cats : cats.slice(0, 8)
 
     return (
-        <div className="min-h-screen bg-white text-secondary">
-            {/* =====================================================
-          PHARMACY HEADER
-      ===================================================== */}
-            <header className="sticky top-0 z-50 border-b border-gray-100 bg-white/95 backdrop-blur-xl">
-                <div className="container">
-                    <div className="flex h-[70px] items-center justify-between gap-6">
-                        {/* Logo */}
-                        <Link href="/" className="shrink-0">
-                            <span className="text-xl font-bold tracking-tight text-secondary">
-                                ShifAI
-                            </span>
-                        </Link>
+        <PharmacyShell hideSearch>
+            <MotionStyles />
 
-                        {/* Navigation */}
-                        <nav className="hidden items-center gap-7 lg:flex">
-                            <Link
-                                href="/"
-                                className="text-sm font-medium text-gray-500 hover:text-secondary"
-                            >
-                                Home
-                            </Link>
-
-                            <Link
-                                href="/pharmacy"
-                                className="text-sm font-semibold text-primary"
-                            >
-                                Pharmacy
-                            </Link>
-
-                            <Link
-                                href="/pharmacy?section=medicines"
-                                className="text-sm font-medium text-gray-500 hover:text-secondary"
-                            >
-                                Medicines
-                            </Link>
-
-                            <Link
-                                href="/pharmacy?section=deals"
-                                className="text-sm font-medium text-gray-500 hover:text-secondary"
-                            >
-                                Deals
-                            </Link>
-
-                            <Link
-                                href="/pharmacy?section=categories"
-                                className="text-sm font-medium text-gray-500 hover:text-secondary"
-                            >
-                                Categories
-                            </Link>
-                        </nav>
-
-                        {/* Actions */}
-                        <div className="flex items-center gap-2">
-                            <Link
-                                href="/pharmacy/wishlist"
-                                className="flex h-10 w-10 items-center justify-center rounded-xl text-gray-500 transition-colors hover:bg-gray-50 hover:text-primary"
-                                aria-label="Wishlist"
-                            >
-                                <Heart className="h-5 w-5" />
-                            </Link>
-
-                            <Link
-                                href="/pharmacy/cart"
-                                className="relative flex h-10 w-10 items-center justify-center rounded-xl text-gray-500 transition-colors hover:bg-gray-50 hover:text-primary"
-                                aria-label="Cart"
-                            >
-                                <ShoppingBag className="h-5 w-5" />
-
-                                <span className="absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[8px] font-bold text-white">
-                                    0
-                                </span>
-                            </Link>
-                        </div>
-                    </div>
-                </div>
-            </header>
-
-            <main>
-                {/* =====================================================
-            HERO
-        ===================================================== */}
-                <section className="relative overflow-visible bg-secondary text-white">
-                    <div className="pointer-events-none absolute right-[-150px] top-[-200px] h-[500px] w-[500px] rounded-full bg-primary/10 blur-[100px]" />
-
-                    <div className="container relative">
-                        <div className="py-16 text-center sm:py-20 lg:py-24">
-                            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary">
-                                MediCheck Pharmacy
+            <section id="top" className="relative overflow-hidden bg-secondary text-white">
+                <div className="mc-float-slow pointer-events-none absolute -right-40 -top-56 h-[520px] w-[520px] rounded-full bg-primary/20 blur-[110px]" />
+                <div className="pointer-events-none absolute -bottom-48 -left-32 h-[420px] w-[420px] rounded-full bg-primary/10 blur-[110px]" />
+                <div className="container relative grid items-center gap-10 py-12 sm:py-16 lg:grid-cols-[1.25fr_0.75fr]">
+                    <div>
+                        <Reveal>
+                            <p className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1.5 text-xs font-semibold text-primary">
+                                <ShieldCheck className="h-3.5 w-3.5" />MediCheck Pharmacy
                             </p>
-
-                            <h1 className="mx-auto mt-4 max-w-3xl text-4xl font-semibold tracking-[-0.035em] sm:text-5xl lg:text-6xl">
-                                Healthcare products,
-                                <br />
-                                <span className="text-primary">
-                                    made easier to find.
-                                </span>
+                        </Reveal>
+                        <Reveal delay={80}>
+                            <h1 className="mt-5 text-4xl font-bold leading-[1.1] tracking-tight sm:text-5xl">
+                                Find your medicine.<br /><span className="text-primary">Compare. Save.</span>
                             </h1>
-
-                            <p className="mx-auto mt-5 max-w-xl text-sm leading-7 text-gray-300 sm:text-base">
-                                Search medicines, wellness products, and healthcare
-                                essentials from participating pharmacies in one place.
+                        </Reveal>
+                        <Reveal delay={160}>
+                            <p className="mt-4 max-w-xl text-sm leading-7 text-gray-300 sm:text-base">
+                                Search by medicine name or barcode and see the price and availability at every partner pharmacy, side by side.
                             </p>
+                        </Reveal>
+                        <Reveal delay={240}>
+                            <div id="search" className="mt-7 max-w-2xl"><SearchBox large placeholder="What are you looking for? Try a medicine name or barcode" /></div>
+                        </Reveal>
+                        {cats.length > 0 && (
+                            <Reveal delay={320}>
+                                <div className="mt-5 flex flex-wrap items-center gap-2 text-xs">
+                                    <span className="text-gray-400">Popular:</span>
+                                    {cats.slice(0, 5).map((c) => (
+                                        <Link key={categoryKeyOf(c)} href={`/pharmacy/category/${encodeURIComponent(categoryKeyOf(c))}`} className="rounded-full border border-white/15 px-3 py-1.5 text-gray-200 transition hover:-translate-y-0.5 hover:border-primary hover:text-primary">
+                                            {friendlyCategory(categoryNameOf(c))}
+                                        </Link>
+                                    ))}
+                                </div>
+                            </Reveal>
+                        )}
+                    </div>
 
-                            {/* Search */}
-                            <div className="relative mx-auto mt-8 max-w-2xl text-left">
-                                <div className="flex h-14 items-center rounded-2xl bg-white p-1.5 shadow-2xl">
-                                    <Search className="ml-4 h-5 w-5 shrink-0 text-gray-400" />
+                    <Reveal delay={200} className="hidden lg:block">
+                        <div className="rounded-3xl border border-white/10 bg-white/[0.06] p-6 backdrop-blur">
+                            <p className="text-sm font-semibold text-white">Why shop with MediCheck</p>
+                            <ul className="mt-5 space-y-5">
+                                {[
+                                    { icon: Tag, title: "Compare prices", text: "The same product, every pharmacy, one page." },
+                                    { icon: Clock3, title: "Know how fresh the stock is", text: "We show when each pharmacy last updated." },
+                                    { icon: Store, title: "Browse by pharmacy", text: "Explore a pharmacy's full range by category." },
+                                ].map(({ icon: Icon, title, text }) => (
+                                    <li key={title} className="flex gap-3">
+                                        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/15"><Icon className="h-5 w-5 text-primary" /></span>
+                                        <span><span className="block text-sm font-semibold">{title}</span><span className="block text-xs leading-5 text-gray-400">{text}</span></span>
+                                    </li>
+                                ))}
+                            </ul>
+                            {(pharmacyCount > 0 || cats.length > 0) && (
+                                <div className="mt-6 grid grid-cols-2 gap-3 border-t border-white/10 pt-5 text-center">
+                                    <div><p className="text-2xl font-bold">{pharmacyCount || "–"}</p><p className="text-[11px] text-gray-400">partner pharmacies</p></div>
+                                    <div><p className="text-2xl font-bold">{cats.length || "–"}</p><p className="text-[11px] text-gray-400">categories</p></div>
+                                </div>
+                            )}
+                        </div>
+                    </Reveal>
+                </div>
+            </section>
 
-                                    <input
-                                        value={search}
-                                        onChange={(event) =>
-                                            setSearch(event.target.value)
-                                        }
-                                        placeholder="Search medicines, brands, ingredients..."
-                                        className="h-full flex-1 bg-transparent px-4 text-sm text-secondary outline-none placeholder:text-gray-400"
-                                    />
+            <div className="container pb-6">
+                <section id="categories" className="scroll-mt-24 pt-10">
+                    <h2 className="text-xl font-bold tracking-tight sm:text-2xl">Shop by category</h2>
+                    <p className="mt-1 text-sm text-gray-500">Pick a category to see every product and compare pharmacy prices.</p>
 
-                                    <button
-                                        type="button"
-                                        className="hidden h-11 rounded-xl bg-primary px-6 text-sm font-semibold text-white transition-colors hover:bg-primary/90 sm:block"
-                                    >
-                                        Search
+                    {categories.loading ? (
+                        <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+                            {Array.from({ length: 8 }, (_, i) => <div key={i} className="h-24 animate-pulse rounded-2xl bg-gray-200" />)}
+                        </div>
+                    ) : cats.length ? (
+                        <>
+                            <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+                                {visibleCats.map((c, i) => {
+                                    const raw = categoryNameOf(c)
+                                    const Icon = categoryIcon(raw)
+                                    const h = hue(raw)
+                                    return (
+                                        <Reveal key={categoryKeyOf(c)} delay={(i % 4) * 70} className="h-full">
+                                            <Link href={`/pharmacy/category/${encodeURIComponent(categoryKeyOf(c))}`}
+                                                className="group flex h-full items-center gap-3 rounded-2xl border border-gray-100 bg-white p-4 transition-all hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-lg">
+                                                <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl transition-transform group-hover:scale-110"
+                                                    style={{ background: `hsl(${h} 70% 94%)`, color: `hsl(${h} 45% 34%)` }}>
+                                                    <Icon className="h-6 w-6" />
+                                                </span>
+                                                <span className="min-w-0">
+                                                    <span className="block truncate text-sm font-bold leading-5 group-hover:text-primary">{friendlyCategory(raw)}</span>
+                                                    <span className="block text-xs text-gray-400">
+                                                        {typeof c.pharmacy_count === "number" && c.pharmacy_count > 0 ? `At ${c.pharmacy_count} pharmacies` : "Browse products"}
+                                                    </span>
+                                                </span>
+                                            </Link>
+                                        </Reveal>
+                                    )
+                                })}
+                            </div>
+                            {cats.length > 8 && (
+                                <div className="mt-5 text-center">
+                                    <button type="button" onClick={() => setShowAllCats((v) => !v)} className="inline-flex h-11 items-center gap-2 rounded-xl border border-gray-200 bg-white px-6 text-sm font-semibold hover:border-primary hover:text-primary" aria-expanded={showAllCats}>
+                                        {showAllCats ? "Show fewer categories" : `Show all ${cats.length} categories`}
+                                        <ChevronDown className={`h-4 w-4 transition-transform ${showAllCats ? "rotate-180" : ""}`} />
                                     </button>
                                 </div>
-
-                                {/* Search dropdown */}
-                                {search.trim() && (
-                                    <div className="absolute left-0 right-0 top-[62px] z-40 overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-2xl">
-                                        {searchResults.length > 0 ? (
-                                            <>
-                                                {searchResults.map((product) => (
-                                                    <Link
-                                                        key={product.id}
-                                                        href={`/pharmacy/product/${product.id}`}
-                                                        onClick={() => setSearch("")}
-                                                        className="flex items-center gap-4 border-b border-gray-50 px-5 py-4 transition-colors hover:bg-gray-50"
-                                                    >
-                                                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
-                                                            <ShoppingBag className="h-4 w-4 text-primary" />
-                                                        </div>
-
-                                                        <div className="min-w-0 flex-1">
-                                                            <p className="truncate text-sm font-semibold text-secondary">
-                                                                {product.name}
-                                                            </p>
-
-                                                            <p className="mt-0.5 text-xs text-gray-400">
-                                                                {product.strength} · {product.dosageForm} ·{" "}
-                                                                {product.category}
-                                                            </p>
-                                                        </div>
-
-                                                        <ChevronRight className="h-4 w-4 text-gray-300" />
-                                                    </Link>
-                                                ))}
-
-                                                <Link
-                                                    href={`/pharmacy?search=${encodeURIComponent(
-                                                        search
-                                                    )}`}
-                                                    onClick={() => setSearch("")}
-                                                    className="flex items-center justify-between px-5 py-4 text-xs font-semibold text-primary hover:bg-primary/[0.03]"
-                                                >
-                                                    View all results
-                                                    <ArrowRight className="h-3.5 w-3.5" />
-                                                </Link>
-                                            </>
-                                        ) : (
-                                            <div className="px-5 py-8 text-center">
-                                                <Search className="mx-auto h-6 w-6 text-gray-300" />
-
-                                                <p className="mt-3 text-sm font-semibold text-secondary">
-                                                    No products found
-                                                </p>
-
-                                                <p className="mt-1 text-xs text-gray-400">
-                                                    Try another medicine, brand, or ingredient.
-                                                </p>
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
-                            </div>
-
-                            {/* Popular searches */}
-                            <div className="mt-5 flex flex-wrap items-center justify-center gap-2 text-xs">
-                                <span className="text-gray-500">
-                                    Popular:
-                                </span>
-
-                                {["Panadol", "Vitamin C", "Skincare", "First Aid"].map(
-                                    (item) => (
-                                        <button
-                                            key={item}
-                                            type="button"
-                                            onClick={() => setSearch(item)}
-                                            className="rounded-full border border-white/10 px-3 py-1.5 text-gray-300 transition-colors hover:border-primary/30 hover:text-primary"
-                                        >
-                                            {item}
-                                        </button>
-                                    )
-                                )}
-                            </div>
-                        </div>
-                    </div>
+                            )}
+                        </>
+                    ) : (
+                        <p className="mt-5 rounded-2xl border border-dashed border-gray-200 bg-white p-8 text-center text-sm text-gray-500">
+                            {categories.error || "Categories are not available right now. Please check back shortly."}
+                        </p>
+                    )}
                 </section>
 
-                {/* =====================================================
-            CATEGORIES
-        ===================================================== */}
-                <section className="py-16 sm:py-20">
-                    <div className="container">
-                        <div className="flex items-end justify-between gap-6">
-                            <div>
-                                <p className="text-xs font-bold uppercase tracking-[0.16em] text-primary">
-                                    Explore
-                                </p>
+                {feed.error && feed.items.length === 0 ? (
+                    <div className="mt-10"><ErrorState message={feed.error} onRetry={feed.retry} /></div>
+                ) : (
+                    <div className="mt-4">
+                        <ProductRow title="Top picks" subtitle="Popular health essentials, available at many of our partner pharmacies." products={topPicks} loading={feed.loading} />
+                        <ProductRow title="Compare & save" subtitle="The price changes from pharmacy to pharmacy. These products show the biggest difference." products={saveMore} loading={feed.loading} />
 
-                                <h2 className="mt-2 text-2xl font-bold tracking-tight text-secondary sm:text-3xl">
-                                    Shop by category
-                                </h2>
-
-                                <p className="mt-2 max-w-lg text-sm text-gray-500">
-                                    Find what you need across medicines, wellness,
-                                    personal care, and healthcare essentials.
-                                </p>
-                            </div>
-
-                            <Link
-                                href="/pharmacy?section=categories"
-                                className="hidden items-center gap-2 text-sm font-semibold text-primary sm:flex"
-                            >
-                                View all
-                                <ArrowRight className="h-4 w-4" />
-                            </Link>
-                        </div>
-
-                        <div className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-                            {pharmacyCategories.slice(0, 8).map((category) => (
-                                <CategoryCard
-                                    key={category.slug}
-                                    {...category}
-                                />
-                            ))}
-                        </div>
-                    </div>
-                </section>
-
-                {/* =====================================================
-            HOT DEALS
-        ===================================================== */}
-                <section className="bg-gray-50 py-16 sm:py-20">
-                    <div className="container">
-                        <div className="flex items-end justify-between">
-                            <div>
-                                <p className="text-xs font-bold uppercase tracking-[0.16em] text-primary">
-                                    Limited offers
-                                </p>
-
-                                <h2 className="mt-2 text-2xl font-bold tracking-tight text-secondary sm:text-3xl">
-                                    Hot deals
-                                </h2>
-
-                                <p className="mt-2 text-sm text-gray-500">
-                                    Discover selected offers from participating pharmacies.
-                                </p>
-                            </div>
-
-                            <Link
-                                href="/pharmacy?section=deals"
-                                className="hidden items-center gap-2 text-sm font-semibold text-primary sm:flex"
-                            >
-                                See all deals
-                                <ArrowRight className="h-4 w-4" />
-                            </Link>
-                        </div>
-
-                        <div className="mt-8 grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
-                            {hotDeals.map((product) => (
-                                <ProductCard
-                                    key={product.id}
-                                    product={product}
-                                />
-                            ))}
-                        </div>
-                    </div>
-                </section>
-
-                {/* =====================================================
-            POPULAR PRODUCTS
-        ===================================================== */}
-                <section className="py-16 sm:py-20">
-                    <div className="container">
-                        <div>
-                            <p className="text-xs font-bold uppercase tracking-[0.16em] text-primary">
-                                Popular now
-                            </p>
-
-                            <h2 className="mt-2 text-2xl font-bold tracking-tight text-secondary sm:text-3xl">
-                                Popular healthcare products
-                            </h2>
-                        </div>
-
-                        <div className="mt-8 grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
-                            {popularProducts.map((product) => (
-                                <ProductCard
-                                    key={product.id}
-                                    product={product}
-                                />
-                            ))}
-                        </div>
-                    </div>
-                </section>
-
-                {/* =====================================================
-            PHARMACIES
-        ===================================================== */}
-                <section className="border-y border-gray-100 bg-gray-50 py-16 sm:py-20">
-                    <div className="container">
-                        <div className="max-w-xl">
-                            <p className="text-xs font-bold uppercase tracking-[0.16em] text-primary">
-                                Our network
-                            </p>
-
-                            <h2 className="mt-2 text-2xl font-bold tracking-tight text-secondary sm:text-3xl">
-                                Participating pharmacies
-                            </h2>
-
-                            <p className="mt-3 text-sm leading-6 text-gray-500">
-                                Explore products made available through pharmacies
-                                participating in the MediCheck platform.
-                            </p>
-                        </div>
-
-                        <div className="mt-8 grid gap-4 md:grid-cols-3">
-                            {[
-                                "CarePlus Pharmacy",
-                                "HealthLine Pharmacy",
-                                "MediCare Pharmacy",
-                            ].map((pharmacy) => (
-                                <div
-                                    key={pharmacy}
-                                    className="rounded-2xl border border-gray-100 bg-white p-5"
-                                >
-                                    <div className="flex items-start justify-between">
-                                        <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10">
-                                            <Store className="h-5 w-5 text-primary" />
-                                        </div>
-
-                                        <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[9px] font-semibold text-emerald-600">
-                                            Connected
-                                        </span>
-                                    </div>
-
-                                    <h3 className="mt-5 text-sm font-bold text-secondary">
-                                        {pharmacy}
-                                    </h3>
-
-                                    <p className="mt-1 text-xs text-gray-400">
-                                        Alexandria
-                                    </p>
-
-                                    <div className="mt-5 flex items-center justify-between border-t border-gray-100 pt-4">
-                                        <span className="text-xs text-gray-500">
-                                            Participating pharmacy
-                                        </span>
-
-                                        <ArrowRight className="h-4 w-4 text-gray-300" />
+                        {deals.length > 0 || discounts.loading ? (
+                            <ProductRow id="deals" title="Deals & discounts" subtitle="Reduced prices reported by our pharmacies." products={deals} loading={discounts.loading} />
+                        ) : (
+                            <section id="deals" className="scroll-mt-24 py-7">
+                                <div className="flex items-center gap-4 rounded-3xl border border-dashed border-gray-200 bg-white p-5 sm:p-6">
+                                    <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/10"><Tag className="h-5 w-5 text-primary" /></span>
+                                    <div>
+                                        <p className="text-sm font-bold">No active discounts right now</p>
+                                        <p className="text-xs text-gray-500">New offers appear here as soon as pharmacies publish them. Check back soon.</p>
                                     </div>
                                 </div>
-                            ))}
-                        </div>
+                            </section>
+                        )}
+
+                        <ProductRow title="Recently updated" subtitle="Listings that pharmacies refreshed most recently." products={recent} loading={feed.loading} />
+                        {cats.slice(0, 4).map((c) => <CategoryRow key={categoryKeyOf(c)} category={c} />)}
                     </div>
-                </section>
+                )}
 
-                {/* =====================================================
-            WHY MEDICHECK
-        ===================================================== */}
-                <section className="py-16 sm:py-20">
-                    <div className="container">
-                        <div className="mx-auto max-w-2xl text-center">
-                            <p className="text-xs font-bold uppercase tracking-[0.16em] text-primary">
-                                Why MediCheck
-                            </p>
-
-                            <h2 className="mt-3 text-2xl font-bold tracking-tight text-secondary sm:text-3xl">
-                                A simpler way to find healthcare products
-                            </h2>
-                        </div>
-
-                        <div className="mt-10 grid gap-4 md:grid-cols-4">
-                            {[
-                                {
-                                    icon: Search,
-                                    title: "Easy search",
-                                    text: "Find products using names, brands, categories, or ingredients.",
-                                },
-                                {
-                                    icon: Store,
-                                    title: "Multiple pharmacies",
-                                    text: "Explore offers from participating pharmacies in one place.",
-                                },
-                                {
-                                    icon: CheckCircle2,
-                                    title: "Availability",
-                                    text: "See product availability before adding an item to your cart.",
-                                },
-                                {
-                                    icon: ShieldCheck,
-                                    title: "Connected care",
-                                    text: "A pharmacy experience connected to your wider healthcare journey.",
-                                },
-                            ].map((item) => {
-                                const Icon = item.icon
-
-                                return (
-                                    <div
-                                        key={item.title}
-                                        className="rounded-2xl border border-gray-100 p-6"
-                                    >
-                                        <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10">
-                                            <Icon className="h-5 w-5 text-primary" />
-                                        </div>
-
-                                        <h3 className="mt-5 text-sm font-bold text-secondary">
-                                            {item.title}
-                                        </h3>
-
-                                        <p className="mt-2 text-xs leading-5 text-gray-500">
-                                            {item.text}
-                                        </p>
+                <section className="py-10">
+                    <h2 className="text-center text-xl font-bold tracking-tight sm:text-2xl">How MediCheck works</h2>
+                    <div className="mt-6 grid gap-4 md:grid-cols-3">
+                        {[
+                            { icon: Search, step: "1", title: "Search or browse", text: "Type a medicine name or barcode, or start from a category." },
+                            { icon: Tag, step: "2", title: "Compare pharmacies", text: "See each pharmacy's price and stock, and when it was last updated." },
+                            { icon: Store, step: "3", title: "Choose your pharmacy", text: "Open the pharmacy that suits you and continue from there." },
+                        ].map(({ icon: Icon, step, title, text }, i) => (
+                            <Reveal key={step} delay={i * 100} className="h-full">
+                                <div className="h-full rounded-2xl border border-gray-100 bg-white p-6 transition-shadow hover:shadow-lg">
+                                    <div className="flex items-center gap-3">
+                                        <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-sm font-bold text-white">{step}</span>
+                                        <Icon className="h-5 w-5 text-primary" />
                                     </div>
-                                )
-                            })}
-                        </div>
+                                    <h3 className="mt-4 text-base font-bold">{title}</h3>
+                                    <p className="mt-1.5 text-sm leading-6 text-gray-500">{text}</p>
+                                </div>
+                            </Reveal>
+                        ))}
                     </div>
                 </section>
 
-                {/* =====================================================
-            CTA
-        ===================================================== */}
-                <section className="pb-16 sm:pb-20">
-                    <div className="container">
-                        <div className="overflow-hidden rounded-3xl bg-secondary px-6 py-12 text-center sm:px-12">
-                            <p className="text-xs font-bold uppercase tracking-[0.16em] text-primary">
-                                MediCheck Pharmacy
-                            </p>
+                <section id="pharmacies" className="scroll-mt-24 pb-6">
+                    <h2 className="text-xl font-bold tracking-tight sm:text-2xl">Our partner pharmacies</h2>
+                    <p className="mb-5 mt-1 text-sm text-gray-500">Open a pharmacy to browse its full range, organised by category.</p>
+                    {feed.loading ? (
+                        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{Array.from({ length: 3 }, (_, i) => <div key={i} className="h-40 animate-pulse rounded-2xl bg-gray-200" />)}</div>
+                    ) : <PharmacyDirectory seed={feed.items} />}
+                </section>
 
-                            <h2 className="mx-auto mt-3 max-w-xl text-3xl font-bold tracking-tight text-white">
-                                Find what you need, without the extra searching.
-                            </h2>
-
-                            <p className="mx-auto mt-4 max-w-lg text-sm leading-6 text-gray-400">
-                                Search medicines and healthcare products from
-                                participating pharmacies.
-                            </p>
-
-                            <Link
-                                href="#"
-                                className="mt-7 inline-flex h-11 items-center rounded-xl bg-primary px-6 text-sm font-semibold text-white hover:bg-primary/90"
-                            >
-                                Start shopping
-                                <ArrowRight className="ml-2 h-4 w-4" />
-                            </Link>
+                <section className="py-8">
+                    <div className="flex flex-col items-start justify-between gap-5 overflow-hidden rounded-3xl bg-secondary px-6 py-8 text-white sm:flex-row sm:items-center sm:px-10">
+                        <div>
+                            <h2 className="text-xl font-bold sm:text-2xl">Can’t find what you’re looking for?</h2>
+                            <p className="mt-1 text-sm text-gray-300">Try the product’s full name, a shorter keyword, or the barcode on the box.</p>
                         </div>
+                        <a href="#search" className="inline-flex h-12 shrink-0 items-center gap-2 rounded-xl bg-primary px-6 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-primary/90">
+                            <Search className="h-4 w-4" />Search again
+                        </a>
                     </div>
                 </section>
-            </main>
-        </div>
+            </div>
+        </PharmacyShell>
     )
 }

@@ -1,4 +1,4 @@
-﻿"use client"
+"use client"
 
 import { useState } from "react"
 import {
@@ -34,6 +34,9 @@ export default function SystemSettings() {
 
   const handleInputChange = () => {
     setIsUnsaved(true)
+  }
+  const handleSave = () => {
+    setIsUnsaved(false)
   }
 
 

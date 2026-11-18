@@ -1,9 +1,9 @@
 "use client"
 
+import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 
 import {
-  Activity,
   ArrowRight,
   BadgeCheck,
   Brain,
@@ -12,9 +12,7 @@ import {
   FlaskConical,
   HeartPulse,
   PackageCheck,
-  Pill,
   ScanLine,
-  Search,
   ShieldCheck,
   ShoppingBag,
   Sparkles,
@@ -24,13 +22,23 @@ import {
 
 import { Button } from "@/components/ui/button"
 import { Logo } from "@/components/logo"
-import { FeatureCard } from "@/components/feature-card"
 import { TestimonialCard } from "@/components/testimonial-card"
-import { HealthAssistantChat } from "@/components/health-assistant-chat"
 import { AuthStateHandler } from "@/components/auth-state-handler"
 
+import { SearchBox } from "@/components/pharmacy/search-box"
+import { ProductRow } from "@/components/pharmacy/product-carousel"
+import { ProductImage } from "@/components/pharmacy/product-card"
+import { Reveal, CountUp, Marquee, MotionStyles } from "@/components/pharmacy/motion"
+import { fetchCategories, fetchDiscounts, getKnownPharmacies } from "@/lib/pharmacy/api"
+import {
+  categoryIcon, categoryKeyOf, categoryNameOf, friendlyCategory, hue, isRealProduct, sortCategories,
+} from "@/lib/pharmacy/categories"
+import { useAsync, useInView, useProductFeed } from "@/lib/pharmacy/hooks"
+import { formatEGP, groupProducts, productHref, savingsPct } from "@/lib/pharmacy/marketplace"
+import type { MarketProduct } from "@/lib/pharmacy/types"
+
 /* =========================================================
-   DATA
+   STATIC CONTENT (health tools only — all pharmacy data is live)
 ========================================================= */
 
 const assessmentServices = [
@@ -57,72 +65,6 @@ const assessmentServices = [
     href: "/lab-assessments",
     icon: FlaskConical,
     label: "Clinical Data",
-  },
-]
-
-const pharmacyCategories = [
-  {
-    name: "Medicines",
-    description: "Browse medicines and healthcare essentials",
-    icon: Pill,
-  },
-  {
-    name: "Vitamins & Supplements",
-    description: "Support your everyday wellness",
-    icon: HeartPulse,
-  },
-  {
-    name: "Personal Care",
-    description: "Everyday personal healthcare products",
-    icon: Sparkles,
-  },
-  {
-    name: "Hot Deals",
-    description: "Discover selected pharmacy offers",
-    icon: Tag,
-  },
-]
-
-const pharmacyHotDeals = [
-  {
-    id: "PH001",
-    name: "Daily Multivitamin",
-    pharmacyName: "MediCare Pharmacy",
-    category: "Vitamins & Supplements",
-    price: 95,
-    originalPrice: 120,
-    discount: 20,
-    prescriptionRequired: false,
-  },
-  {
-    id: "PH002",
-    name: "Vitamin C 1000mg",
-    pharmacyName: "HealthPlus Pharmacy",
-    category: "Vitamins & Supplements",
-    price: 120,
-    originalPrice: 150,
-    discount: 20,
-    prescriptionRequired: false,
-  },
-  {
-    id: "PH003",
-    name: "Moisturizing Cream",
-    pharmacyName: "Care Pharmacy",
-    category: "Personal Care",
-    price: 75,
-    originalPrice: 90,
-    discount: 17,
-    prescriptionRequired: false,
-  },
-  {
-    id: "PH004",
-    name: "Pain Relief Tablets",
-    pharmacyName: "MediCare Pharmacy",
-    category: "Pain Relief",
-    price: 80,
-    originalPrice: 100,
-    discount: 20,
-    prescriptionRequired: true,
   },
 ]
 
@@ -182,71 +124,78 @@ const testimonials = [
 ========================================================= */
 
 export default function Home() {
+  /* ---------- live pharmacy data (PharmaSync via /api/pharmacy/*) ---------- */
+  const categories = useAsync((s) => fetchCategories(undefined, s), "home-categories")
+  const discounts = useAsync((s) => fetchDiscounts({ limit: 66 }, s), "home-discounts")
+  const deals = useMemo(
+    () =>
+      groupProducts(discounts.data?.items ?? [])
+        .filter((p) => p.maxDiscount && isRealProduct(p))
+        .sort((a, b) => (b.maxDiscount ?? 0) - (a.maxDiscount ?? 0)),
+    [discounts.data]
+  )
+  const feed = useProductFeed({}, 132)
+  const sample = useMemo(() => feed.groups.filter(isRealProduct), [feed.groups])
+  const cats = useMemo(() => sortCategories(categories.data ?? []), [categories.data])
+
+  // Read client-only cache after mount so server and client markup match (avoids hydration errors).
+  const [pharmacyCount, setPharmacyCount] = useState(0)
+  useEffect(() => {
+    setPharmacyCount(getKnownPharmacies().length)
+  }, [feed.items])
+  const topPicks = useMemo(
+    () =>
+      sample
+        .filter((p) => p.bestOffer?.price != null)
+        .sort(
+          (a, b) =>
+            Number(b.availability.status === "in_stock") - Number(a.availability.status === "in_stock") ||
+            b.offerCount - a.offerCount
+        ),
+    [sample]
+  )
+  const showcase = useMemo(
+    () => sample.filter((p) => p.offerCount > 1 && savingsPct(p) >= 1).sort((a, b) => savingsPct(b) - savingsPct(a))[0],
+    [sample]
+  )
+
+  // Show real discounts when there are any; otherwise fall back to real top picks.
+  const spotlight = deals.length > 0 ? deals : topPicks
+  const spotlightLoading = deals.length > 0 ? false : discounts.loading || feed.loading
+
+  const footerPharmacyLinks: [string, string][] = [
+    ["Pharmacy Home", "/pharmacy"],
+    ...cats.slice(0, 3).map(
+      (c): [string, string] => [friendlyCategory(categoryNameOf(c)), `/pharmacy/category/${encodeURIComponent(categoryKeyOf(c))}`]
+    ),
+    ["Deals & Offers", "/pharmacy#deals"],
+  ]
+
   return (
     <div className="min-h-screen bg-white text-secondary">
+      <MotionStyles />
+
       {/* =====================================================
           HEADER
       ===================================================== */}
       <header className="sticky top-0 z-50 border-b border-gray-100 bg-white/95 backdrop-blur-xl">
         <div className="container">
           <div className="flex h-[68px] items-center justify-between">
-            {/* Logo */}
             <Logo />
 
-            {/* Navigation */}
             <nav className="hidden items-center gap-7 lg:flex">
-              <Link
-                href="/"
-                className="text-sm font-semibold text-primary"
-              >
-                Home
-              </Link>
-
-              <Link
-                href="/symptom-checker"
-                className="text-sm font-medium text-gray-500 transition-colors hover:text-secondary"
-              >
-                Symptom Checker
-              </Link>
-
-              <Link
-                href="/x-ray"
-                className="text-sm font-medium text-gray-500 transition-colors hover:text-secondary"
-              >
-                X-ray
-              </Link>
-
-              <Link
-                href="/lab-assessments"
-                className="text-sm font-medium text-gray-500 transition-colors hover:text-secondary"
-              >
-                Lab Assessments
-              </Link>
-
-              <Link
-                href="/pharmacy"
-                className="flex items-center gap-1.5 text-sm font-semibold text-primary transition-colors hover:text-secondary"
-              >
+              <Link href="/" className="text-sm font-semibold text-primary">Home</Link>
+              <Link href="/symptom-checker" className="text-sm font-medium text-gray-500 transition-colors hover:text-secondary">Symptom Checker</Link>
+              <Link href="/x-ray" className="text-sm font-medium text-gray-500 transition-colors hover:text-secondary">X-ray</Link>
+              <Link href="/lab-assessments" className="text-sm font-medium text-gray-500 transition-colors hover:text-secondary">Lab Assessments</Link>
+              <Link href="/pharmacy" className="flex items-center gap-1.5 text-sm font-semibold text-primary transition-colors hover:text-secondary">
                 <ShoppingBag className="h-4 w-4" />
                 Pharmacy
               </Link>
-
-              <Link
-                href="/services"
-                className="text-sm font-medium text-gray-500 transition-colors hover:text-secondary"
-              >
-                Services
-              </Link>
-
-              <Link
-                href="/about"
-                className="text-sm font-medium text-gray-500 transition-colors hover:text-secondary"
-              >
-                About
-              </Link>
+              <Link href="/services" className="text-sm font-medium text-gray-500 transition-colors hover:text-secondary">Services</Link>
+              <Link href="/about" className="text-sm font-medium text-gray-500 transition-colors hover:text-secondary">About</Link>
             </nav>
 
-            {/* Auth */}
             <div className="flex items-center">
               <AuthStateHandler />
             </div>
@@ -259,248 +208,180 @@ export default function Home() {
             HERO
         ===================================================== */}
         <section className="relative overflow-hidden bg-secondary">
-          {/* Very subtle background decoration */}
-          <div className="pointer-events-none absolute right-[-180px] top-[-220px] h-[520px] w-[520px] rounded-full bg-primary/[0.08] blur-3xl" />
+          <div className="mc-float-slow pointer-events-none absolute right-[-180px] top-[-220px] h-[520px] w-[520px] rounded-full bg-primary/[0.1] blur-3xl" />
+          <div className="pointer-events-none absolute bottom-[-260px] left-[-160px] h-[420px] w-[420px] rounded-full bg-primary/[0.06] blur-3xl" />
 
           <div className="container relative">
             <div className="grid min-h-[570px] items-center gap-12 py-14 lg:grid-cols-[1.05fr_0.95fr] lg:py-16">
-
-              {/* =================================================
-                  LEFT — HERO CONTENT
-              ================================================= */}
+              {/* LEFT */}
               <div className="max-w-[650px]">
-                {/* Small label */}
-                <div className="mb-6 flex items-center gap-2">
-                  <span className="h-px w-8 bg-primary" />
+                <Reveal>
+                  <div className="mb-6 flex items-center gap-2">
+                    <span className="h-px w-8 bg-primary" />
+                    <span className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">Intelligent healthcare</span>
+                  </div>
+                </Reveal>
 
-                  <span className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">
-                    Intelligent healthcare
-                  </span>
-                </div>
+                <Reveal delay={80}>
+                  <h1 className="text-[46px] font-semibold leading-[1.05] tracking-[-0.035em] text-white sm:text-[56px] lg:text-[64px]">
+                    Healthcare that
+                    <br />
+                    <span className="text-primary">understands you.</span>
+                  </h1>
+                </Reveal>
 
-                {/* Heading */}
-                <h1 className="text-[46px] font-semibold leading-[1.05] tracking-[-0.035em] text-white sm:text-[56px] lg:text-[64px]">
-                  Healthcare that
-                  <br />
+                <Reveal delay={160}>
+                  <p className="mt-6 max-w-[540px] text-base leading-7 text-gray-300 sm:text-[17px]">
+                    ShifAI brings AI-powered health assessments, medical image analysis, laboratory insights, and
+                    live pharmacy prices together in one simple healthcare experience.
+                  </p>
+                </Reveal>
 
-                  <span className="text-primary">
-                    understands you.
-                  </span>
-                </h1>
-
-                {/* Description */}
-                <p className="mt-6 max-w-[540px] text-base leading-7 text-gray-300 sm:text-[17px]">
-                  ShifAI brings AI-powered health assessments, medical
-                  image analysis, laboratory insights, and pharmacy access
-                  together in one simple healthcare experience.
-                </p>
-
-                {/* Buttons */}
-                <div className="mt-8 flex flex-wrap gap-3">
-                  <Link href="/symptom-checker">
-                    <Button
-                      size="lg"
-                      className="h-12 rounded-lg bg-primary px-6 text-sm font-semibold text-white hover:bg-primary/90"
-                    >
-                      Start an Assessment
-                      <ArrowRight className="ml-2 h-4 w-4" />
+                <Reveal delay={240}>
+                  <div className="mt-8 flex flex-wrap gap-3">
+                    <Button asChild size="lg" className="h-12 rounded-lg bg-primary px-6 text-sm font-semibold text-white transition-transform hover:-translate-y-0.5 hover:bg-primary/90">
+                      <Link href="/symptom-checker">
+                        Start an Assessment
+                        <ArrowRight className="ml-2 h-4 w-4" />
+                      </Link>
                     </Button>
-                  </Link>
 
-                  <Link href="/pharmacy">
-                    <Button
-                      size="lg"
-                      variant="outline"
-                      className="h-12 rounded-lg border-white/15 bg-transparent px-6 text-sm font-semibold text-white hover:bg-white hover:text-secondary"
-                    >
-                      <ShoppingBag className="mr-2 h-4 w-4" />
-                      Visit Pharmacy
+                    <Button asChild size="lg" variant="outline" className="h-12 rounded-lg border-white/15 bg-transparent px-6 text-sm font-semibold text-white transition-transform hover:-translate-y-0.5 hover:bg-white hover:text-secondary">
+                      <Link href="/pharmacy">
+                        <ShoppingBag className="mr-2 h-4 w-4" />
+                        Visit Pharmacy
+                      </Link>
                     </Button>
-                  </Link>
-                </div>
-
-                {/* Trust line */}
-                <div className="mt-8 flex flex-wrap items-center gap-x-6 gap-y-3 text-xs text-gray-400">
-                  <div className="flex items-center gap-2">
-                    <ShieldCheck className="h-4 w-4 text-primary" />
-                    Secure platform
                   </div>
+                </Reveal>
 
-                  <div className="flex items-center gap-2">
-                    <Brain className="h-4 w-4 text-primary" />
-                    AI-assisted insights
+                <Reveal delay={320}>
+                  <div className="mt-8 flex flex-wrap items-center gap-x-6 gap-y-3 text-xs text-gray-400">
+                    <div className="flex items-center gap-2"><ShieldCheck className="h-4 w-4 text-primary" />Secure platform</div>
+                    <div className="flex items-center gap-2"><Brain className="h-4 w-4 text-primary" />AI-assisted insights</div>
+                    <div className="flex items-center gap-2"><PackageCheck className="h-4 w-4 text-primary" />Live pharmacy prices</div>
                   </div>
-
-                  <div className="flex items-center gap-2">
-                    <PackageCheck className="h-4 w-4 text-primary" />
-                    Pharmacy access
-                  </div>
-                </div>
+                </Reveal>
               </div>
 
-              {/* =================================================
-                  RIGHT — SIMPLE HEALTHCARE VISUAL
-              ================================================= */}
-              <div className="relative mx-auto w-full max-w-[500px] lg:ml-auto">
+              {/* RIGHT */}
+              <Reveal delay={200} y={32}>
+                <div className="relative mx-auto w-full max-w-[500px] lg:ml-auto">
+                  <div className="mc-float-slow relative rounded-[28px] border border-white/10 bg-white/[0.045] p-5 shadow-2xl backdrop-blur-sm">
+                    <div className="flex items-center justify-between border-b border-white/10 pb-4">
+                      <div>
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-gray-500">ShifAI</p>
+                        <p className="mt-1 text-sm font-medium text-white">Your health overview</p>
+                      </div>
 
-                {/* Main visual */}
-                <div className="relative rounded-[28px] border border-white/10 bg-white/[0.045] p-5 shadow-2xl backdrop-blur-sm">
-
-                  {/* Top */}
-                  <div className="flex items-center justify-between border-b border-white/10 pb-4">
-                    <div>
-                      <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-gray-500">
-                        ShifAI
-                      </p>
-
-                      <p className="mt-1 text-sm font-medium text-white">
-                        Your health overview
-                      </p>
+                      <div className="flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1.5">
+                        <span className="relative flex h-2 w-2">
+                          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-75" />
+                          <span className="relative inline-flex h-2 w-2 rounded-full bg-primary" />
+                        </span>
+                        <span className="text-[10px] font-medium text-primary">Connected</span>
+                      </div>
                     </div>
 
-                    <div className="flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1.5">
-                      <span className="h-1.5 w-1.5 rounded-full bg-primary" />
+                    <div className="mt-5 rounded-2xl bg-white p-5">
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <p className="text-xs font-medium text-gray-400">Health tools</p>
+                          <h3 className="mt-1.5 text-xl font-semibold tracking-tight text-secondary">Explore your health</h3>
+                        </div>
+                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
+                          <HeartPulse className="h-5 w-5 text-primary" />
+                        </div>
+                      </div>
 
-                      <span className="text-[10px] font-medium text-primary">
-                        Connected
-                      </span>
+                      <div className="mt-6 grid grid-cols-3 gap-2">
+                        {[
+                          { href: "/symptom-checker", icon: HeartPulse, title: "Symptoms", sub: "Check" },
+                          { href: "/x-ray", icon: ScanLine, title: "X-ray", sub: "Analyze" },
+                          { href: "/lab-assessments", icon: FlaskConical, title: "Labs", sub: "Assess" },
+                        ].map(({ href, icon: Icon, title, sub }) => (
+                          <Link key={href} href={href} className="group rounded-xl border border-gray-100 p-3 transition-all hover:-translate-y-0.5 hover:border-primary/20 hover:bg-primary/[0.03]">
+                            <Icon className="h-4 w-4 text-primary transition-transform group-hover:scale-110" />
+                            <p className="mt-3 text-[11px] font-semibold text-secondary">{title}</p>
+                            <p className="mt-1 text-[9px] text-gray-400">{sub}</p>
+                          </Link>
+                        ))}
+                      </div>
+                    </div>
+
+                    <Link href="/pharmacy" className="group mt-3 flex items-center justify-between rounded-2xl bg-primary p-4 transition-all hover:bg-primary/90">
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/15">
+                          <ShoppingBag className="h-5 w-5 text-white" />
+                        </div>
+                        <div>
+                          <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/60">Online pharmacy</p>
+                          <p className="mt-1 text-sm font-semibold text-white">
+                            {pharmacyCount > 0 ? `Compare prices across ${pharmacyCount} pharmacies` : "Healthcare essentials in one place"}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10">
+                        <ArrowRight className="h-4 w-4 text-white transition-transform group-hover:translate-x-1" />
+                      </div>
+                    </Link>
+
+                    <div className="mt-3 flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.035] p-3.5">
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10">
+                        <Sparkles className="h-4 w-4 text-primary" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold text-white">ShifAI Assistant</p>
+                        <p className="mt-0.5 text-[10px] text-gray-500">Helping you navigate your healthcare journey</p>
+                      </div>
                     </div>
                   </div>
 
-                  {/* Health overview */}
-                  <div className="mt-5 rounded-2xl bg-white p-5">
-                    <div className="flex items-start justify-between">
+                  <div className="mc-float pointer-events-none absolute -bottom-5 -left-5 hidden rounded-xl border border-gray-100 bg-white px-4 py-3 shadow-xl sm:block">
+                    <div className="flex items-center gap-2.5">
+                      <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
+                        <BadgeCheck className="h-4 w-4 text-primary" />
+                      </div>
                       <div>
-                        <p className="text-xs font-medium text-gray-400">
-                          Health tools
-                        </p>
-
-                        <h3 className="mt-1.5 text-xl font-semibold tracking-tight text-secondary">
-                          Explore your health
-                        </h3>
+                        <p className="text-[10px] font-semibold text-secondary">Real pharmacy data</p>
+                        <p className="text-[9px] text-gray-400">Prices & stock, side by side</p>
                       </div>
-
-                      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
-                        <HeartPulse className="h-5 w-5 text-primary" />
-                      </div>
-                    </div>
-
-                    {/* Services */}
-                    <div className="mt-6 grid grid-cols-3 gap-2">
-                      <Link
-                        href="/symptom-checker"
-                        className="group rounded-xl border border-gray-100 p-3 transition-all hover:border-primary/20 hover:bg-primary/[0.03]"
-                      >
-                        <HeartPulse className="h-4 w-4 text-primary" />
-
-                        <p className="mt-3 text-[11px] font-semibold text-secondary">
-                          Symptoms
-                        </p>
-
-                        <p className="mt-1 text-[9px] text-gray-400">
-                          Check
-                        </p>
-                      </Link>
-
-                      <Link
-                        href="/x-ray"
-                        className="group rounded-xl border border-gray-100 p-3 transition-all hover:border-primary/20 hover:bg-primary/[0.03]"
-                      >
-                        <ScanLine className="h-4 w-4 text-primary" />
-
-                        <p className="mt-3 text-[11px] font-semibold text-secondary">
-                          X-ray
-                        </p>
-
-                        <p className="mt-1 text-[9px] text-gray-400">
-                          Analyze
-                        </p>
-                      </Link>
-
-                      <Link
-                        href="/lab-assessments"
-                        className="group rounded-xl border border-gray-100 p-3 transition-all hover:border-primary/20 hover:bg-primary/[0.03]"
-                      >
-                        <FlaskConical className="h-4 w-4 text-primary" />
-
-                        <p className="mt-3 text-[11px] font-semibold text-secondary">
-                          Labs
-                        </p>
-
-                        <p className="mt-1 text-[9px] text-gray-400">
-                          Assess
-                        </p>
-                      </Link>
-                    </div>
-                  </div>
-
-                  {/* Pharmacy */}
-                  <Link
-                    href="/pharmacy"
-                    className="group mt-3 flex items-center justify-between rounded-2xl bg-primary p-4 transition-all hover:bg-primary/90"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/15">
-                        <ShoppingBag className="h-5 w-5 text-white" />
-                      </div>
-
-                      <div>
-                        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/60">
-                          Online pharmacy
-                        </p>
-
-                        <p className="mt-1 text-sm font-semibold text-white">
-                          Healthcare essentials in one place
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10">
-                      <ArrowRight className="h-4 w-4 text-white transition-transform group-hover:translate-x-1" />
-                    </div>
-                  </Link>
-
-                  {/* Assistant */}
-                  <div className="mt-3 flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.035] p-3.5">
-                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10">
-                      <Sparkles className="h-4 w-4 text-primary" />
-                    </div>
-
-                    <div>
-                      <p className="text-xs font-semibold text-white">
-                        ShifAI Assistant
-                      </p>
-
-                      <p className="mt-0.5 text-[10px] text-gray-500">
-                        Helping you navigate your healthcare journey
-                      </p>
                     </div>
                   </div>
                 </div>
-
-                {/* Small floating card */}
-                <div className="absolute -bottom-5 -left-5 hidden rounded-xl border border-gray-100 bg-white px-4 py-3 shadow-xl sm:block">
-                  <div className="flex items-center gap-2.5">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
-                      <BadgeCheck className="h-4 w-4 text-primary" />
-                    </div>
-
-                    <div>
-                      <p className="text-[10px] font-semibold text-secondary">
-                        Personalized
-                      </p>
-
-                      <p className="text-[9px] text-gray-400">
-                        Built around you
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
+              </Reveal>
             </div>
           </div>
         </section>
 
+        {/* =====================================================
+            LIVE CATEGORY TICKER
+        ===================================================== */}
+        {cats.length > 0 && (
+          <section className="border-b border-gray-100 bg-white py-4" aria-label="Pharmacy categories">
+            <div className="container flex items-center gap-4">
+              <span className="hidden shrink-0 text-xs font-bold uppercase tracking-[0.16em] text-gray-400 sm:block">In the pharmacy</span>
+              <div className="min-w-0 flex-1">
+                <Marquee>
+                  {cats.map((c) => {
+                    const raw = categoryNameOf(c)
+                    const Icon = categoryIcon(raw)
+                    return (
+                      <Link
+                        key={categoryKeyOf(c)}
+                        href={`/pharmacy/category/${encodeURIComponent(categoryKeyOf(c))}`}
+                        className="flex shrink-0 items-center gap-2 rounded-full border border-gray-200 bg-white px-4 py-2 text-xs font-semibold text-secondary transition-colors hover:border-primary hover:text-primary"
+                      >
+                        <Icon className="h-3.5 w-3.5 text-primary" />
+                        {friendlyCategory(raw)}
+                      </Link>
+                    )
+                  })}
+                </Marquee>
+              </div>
+            </div>
+          </section>
+        )}
 
         {/* =====================================================
             PLATFORM INTRO
@@ -508,81 +389,51 @@ export default function Home() {
         <section className="border-b border-gray-100 bg-white">
           <div className="container py-9">
             <div className="grid gap-8 md:grid-cols-3 md:divide-x md:divide-gray-100">
-
-              <PlatformPoint
-                number="01"
-                title="Assess"
-                description="Use AI-powered tools to explore symptoms, laboratory information and medical images."
-              />
-
-              <PlatformPoint
-                number="02"
-                title="Understand"
-                description="Receive clear, accessible results that help you better understand your health information."
-              />
-
-              <PlatformPoint
-                number="03"
-                title="Access"
-                description="Move from digital health tools to healthcare products through the online pharmacy."
-              />
-
+              <Reveal><PlatformPoint number="01" title="Assess" description="Use AI-powered tools to explore symptoms, laboratory information and medical images." /></Reveal>
+              <Reveal delay={100}><PlatformPoint number="02" title="Understand" description="Receive clear, accessible results that help you better understand your health information." /></Reveal>
+              <Reveal delay={200}><PlatformPoint number="03" title="Access" description="Move from digital health tools to real pharmacy products, prices and availability." /></Reveal>
             </div>
           </div>
         </section>
-        
 
         {/* =====================================================
             HEALTH ASSESSMENTS
         ===================================================== */}
-
         <section className="bg-white py-20 md:py-24">
           <div className="container">
-            <SectionHeading
-              eyebrow="HEALTH ASSESSMENTS"
-              title="Healthcare tools in one place"
-              description="Explore ShifAI's digital health services and choose the assessment that matches what you need."
-            />
+            <Reveal>
+              <SectionHeading
+                eyebrow="HEALTH ASSESSMENTS"
+                title="Healthcare tools in one place"
+                description="Explore ShifAI's digital health services and choose the assessment that matches what you need."
+              />
+            </Reveal>
 
             <div className="mt-12 grid gap-5 lg:grid-cols-3">
-              {assessmentServices.map((service) => {
+              {assessmentServices.map((service, i) => {
                 const Icon = service.icon
-
                 return (
-                  <Link
-                    key={service.title}
-                    href={service.href}
-                    className="group"
-                  >
-                    <article className="relative h-full overflow-hidden rounded-2xl border border-gray-200 bg-white p-7 transition-all duration-300 hover:-translate-y-1 hover:border-primary/40 hover:shadow-xl">
-                      <div className="absolute right-0 top-0 h-28 w-28 rounded-full bg-primary/[0.04] blur-2xl transition-all group-hover:bg-primary/[0.08]" />
-
-                      <div className="relative">
-                        <div className="flex items-start justify-between gap-4">
-                          <div className="flex h-13 w-13 items-center justify-center rounded-xl bg-primary/10">
-                            <Icon className="h-6 w-6 text-primary" />
+                  <Reveal key={service.title} delay={i * 110} className="h-full">
+                    <Link href={service.href} className="group block h-full">
+                      <article className="relative h-full overflow-hidden rounded-2xl border border-gray-200 bg-white p-7 transition-all duration-300 hover:-translate-y-1.5 hover:border-primary/40 hover:shadow-xl">
+                        <div className="pointer-events-none absolute right-0 top-0 h-28 w-28 rounded-full bg-primary/[0.04] blur-2xl transition-all group-hover:bg-primary/[0.1]" />
+                        <div className="relative">
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 transition-transform duration-300 group-hover:scale-110">
+                              <Icon className="h-6 w-6 text-primary" />
+                            </div>
+                            <span className="rounded-full bg-gray-50 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-gray-500">{service.label}</span>
                           </div>
-
-                          <span className="rounded-full bg-gray-50 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-gray-500">
-                            {service.label}
-                          </span>
+                          <h3 className="mt-7 text-xl font-bold text-secondary">{service.title}</h3>
+                          <p className="mt-3 text-sm leading-7 text-gray-600">{service.description}</p>
+                          <div className="mt-7 flex items-center text-sm font-semibold text-primary">
+                            Explore assessment
+                            <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" />
+                          </div>
                         </div>
-
-                        <h3 className="mt-7 text-xl font-bold text-secondary">
-                          {service.title}
-                        </h3>
-
-                        <p className="mt-3 text-sm leading-7 text-gray-600">
-                          {service.description}
-                        </p>
-
-                        <div className="mt-7 flex items-center text-sm font-semibold text-primary">
-                          Explore assessment
-                          <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" />
-                        </div>
-                      </div>
-                    </article>
-                  </Link>
+                      </article>
+                    </Link>
+                  </Reveal>
                 )
               })}
             </div>
@@ -590,506 +441,325 @@ export default function Home() {
         </section>
 
         {/* =====================================================
-            PHARMACY FEATURE
+            PHARMACY FEATURE (live)
         ===================================================== */}
-
-        <section className="overflow-hidden bg-[#f6faf8] py-20 md:py-28">
+        <section id="pharmacy" className="overflow-hidden bg-[#f6faf8] py-20 md:py-28">
           <div className="container">
             <div className="grid items-center gap-14 lg:grid-cols-[0.9fr_1.1fr]">
-              {/* Copy */}
               <div>
-                <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-primary/15 bg-primary/10 px-4 py-2 text-xs font-bold tracking-wide text-primary">
-                  <ShoppingBag className="h-4 w-4" />
-                  ONLINE PHARMACY
-                </div>
-
-                <h2 className="max-w-xl text-4xl font-bold leading-tight tracking-tight text-secondary md:text-5xl">
-                  Your healthcare journey,
-                  <span className="block text-primary">
-                    now connected to your pharmacy.
-                  </span>
-                </h2>
-
-                <p className="mt-6 max-w-xl text-base leading-8 text-gray-600">
-                  Discover medicines, vitamins, personal care products, and
-                  selected offers from participating pharmacies through the
-                  ShifAI platform.
-                </p>
-
-                {/* Search */}
-                <form
-                  action="/pharmacy"
-                  method="get"
-                  className="mt-8 max-w-xl"
-                >
-                  <div className="flex items-center rounded-2xl border border-gray-200 bg-white p-2 shadow-lg shadow-gray-200/40 transition-all focus-within:border-primary/40 focus-within:ring-4 focus-within:ring-primary/5">
-                    <Search className="ml-3 h-5 w-5 flex-shrink-0 text-gray-400" />
-
-                    <input
-                      name="search"
-                      type="text"
-                      placeholder="Search medicines, vitamins, personal care..."
-                      className="min-w-0 flex-1 bg-transparent px-3 py-3 text-sm text-secondary outline-none placeholder:text-gray-400"
-                      aria-label="Search pharmacy"
-                    />
-
-                    <Button
-                      type="submit"
-                      className="rounded-xl bg-primary px-5 text-white hover:bg-primary/90"
-                    >
-                      Search
-                    </Button>
+                <Reveal>
+                  <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-primary/15 bg-primary/10 px-4 py-2 text-xs font-bold tracking-wide text-primary">
+                    <ShoppingBag className="h-4 w-4" />
+                    ONLINE PHARMACY
                   </div>
-                </form>
+                </Reveal>
 
-                <div className="mt-6 flex flex-wrap gap-x-6 gap-y-3 text-sm text-gray-600">
-                  <div className="flex items-center gap-2">
-                    <BadgeCheck className="h-4 w-4 text-primary" />
-                    Participating pharmacies
+                <Reveal delay={80}>
+                  <h2 className="max-w-xl text-4xl font-bold leading-tight tracking-tight text-secondary md:text-5xl">
+                    Your healthcare journey,
+                    <span className="block text-primary">now connected to your pharmacy.</span>
+                  </h2>
+                </Reveal>
+
+                <Reveal delay={160}>
+                  <p className="mt-6 max-w-xl text-base leading-8 text-gray-600">
+                    Search any medicine and see its price and availability at every partner pharmacy — so you can choose
+                    the one that suits you best.
+                  </p>
+                </Reveal>
+
+                <Reveal delay={240}>
+                  <div className="mt-8 max-w-xl">
+                    <SearchBox large placeholder="Search medicines or scan a barcode number…" />
                   </div>
+                </Reveal>
 
-                  <div className="flex items-center gap-2">
-                    <ShieldCheck className="h-4 w-4 text-primary" />
-                    Secure experience
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <PackageCheck className="h-4 w-4 text-primary" />
-                    Product availability
-                  </div>
-                </div>
-
-                <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-                  <Link href="/pharmacy">
-                    <Button
-                      size="lg"
-                      className="w-full bg-primary text-white shadow-lg shadow-primary/15 hover:bg-primary/90 sm:w-auto"
-                    >
-                      Explore Pharmacy
-                      <ArrowRight className="ml-2 h-4 w-4" />
-                    </Button>
-                  </Link>
-
-                  <Link href="/pharmacy">
-                    <Button
-                      size="lg"
-                      variant="outline"
-                      className="w-full border-gray-300 bg-white text-secondary hover:border-primary hover:text-primary sm:w-auto"
-                    >
-                      View Offers
-                      <Tag className="ml-2 h-4 w-4" />
-                    </Button>
-                  </Link>
-                </div>
-              </div>
-
-              {/* Pharmacy UI */}
-              <div className="relative">
-                <div className="absolute -inset-5 rounded-[40px] bg-primary/[0.06] blur-2xl" />
-
-                <div className="relative rounded-[28px] border border-gray-200 bg-white p-5 shadow-2xl md:p-7">
-                  {/* Top */}
-                  <div className="flex items-center justify-between border-b border-gray-100 pb-5">
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">
-                        Pharmacy
-                      </p>
-
-                      <h3 className="mt-1 text-xl font-bold text-secondary">
-                        What are you looking for?
-                      </h3>
-                    </div>
-
-                    <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10">
-                      <ShoppingBag className="h-5 w-5 text-primary" />
-                    </div>
-                  </div>
-
-                  {/* Search preview */}
-                  <div className="mt-5 flex items-center gap-3 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3">
-                    <Search className="h-4 w-4 text-gray-400" />
-                    <span className="text-sm text-gray-400">
-                      Search products...
-                    </span>
-                  </div>
-
-                  {/* Categories */}
-                  <div className="mt-5 grid grid-cols-2 gap-3">
-                    {pharmacyCategories.map((category) => {
-                      const Icon = category.icon
-
-                      return (
-                        <Link
-                          key={category.name}
-                          href="/pharmacy"
-                          className="group rounded-xl border border-gray-100 bg-gray-50 p-4 transition-colors hover:border-primary/20 hover:bg-primary/[0.03]"
-                        >
-                          <div className="flex items-center justify-between">
-                            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-white shadow-sm">
-                              <Icon className="h-4 w-4 text-primary" />
-                            </div>
-
-                            <ChevronRight className="h-4 w-4 text-gray-300 transition-transform group-hover:translate-x-1 group-hover:text-primary" />
-                          </div>
-
-                          <p className="mt-4 text-sm font-bold text-secondary">
-                            {category.name}
-                          </p>
-
-                          <p className="mt-1 line-clamp-2 text-[11px] leading-5 text-gray-500">
-                            {category.description}
-                          </p>
-                        </Link>
-                      )
-                    })}
-                  </div>
-
-                  {/* Bottom strip */}
-                  <div className="mt-5 flex items-center justify-between rounded-xl bg-secondary px-4 py-4 text-white">
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/10">
-                        <Tag className="h-4 w-4 text-primary" />
-                      </div>
-
-                      <div>
-                        <p className="text-xs font-semibold">
-                          Looking for a deal?
-                        </p>
-                        <p className="text-[10px] text-gray-400">
-                          Browse selected offers
-                        </p>
-                      </div>
-                    </div>
-
-                    <Link
-                      href="/pharmacy"
-                      className="text-xs font-semibold text-primary hover:underline"
-                    >
-                      View deals
-                    </Link>
-                  </div>
-                </div>
-
-                {/* Floating pharmacy card */}
-                <div className="absolute -bottom-5 -left-5 hidden rounded-2xl border border-gray-100 bg-white p-4 shadow-xl sm:block">
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-green-50">
-                      <Store className="h-5 w-5 text-primary" />
-                    </div>
-
-                    <div>
-                      <p className="text-xs font-bold text-secondary">
-                        Multiple pharmacies
-                      </p>
-                      <p className="mt-0.5 text-[10px] text-gray-500">
-                        Connected to the platform
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* =====================================================
-            PHARMACY CATEGORIES
-        ===================================================== */}
-
-        <section className="bg-white py-20">
-          <div className="container">
-            <div className="flex flex-col justify-between gap-5 md:flex-row md:items-end">
-              <div>
-                <p className="text-xs font-bold tracking-[0.16em] text-primary">
-                  PHARMACY CATEGORIES
-                </p>
-
-                <h2 className="mt-3 text-3xl font-bold tracking-tight text-secondary md:text-4xl">
-                  Find what you need
-                </h2>
-
-                <p className="mt-3 max-w-xl text-gray-600">
-                  Start with a category and explore available healthcare
-                  products.
-                </p>
-              </div>
-
-              <Link
-                href="/pharmacy"
-                className="inline-flex items-center gap-2 text-sm font-semibold text-primary"
-              >
-                Browse all products
-                <ArrowRight className="h-4 w-4" />
-              </Link>
-            </div>
-
-            <div className="mt-10 grid grid-cols-2 gap-4 lg:grid-cols-4">
-              {pharmacyCategories.map((category) => {
-                const Icon = category.icon
-
-                return (
-                  <Link
-                    key={category.name}
-                    href="/pharmacy"
-                    className="group"
-                  >
-                    <div className="h-full rounded-2xl border border-gray-200 bg-white p-5 transition-all duration-300 hover:-translate-y-1 hover:border-primary/30 hover:shadow-lg md:p-6">
-                      <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 transition-colors group-hover:bg-primary/15">
-                        <Icon className="h-6 w-6 text-primary" />
-                      </div>
-
-                      <h3 className="mt-5 font-bold text-secondary">
-                        {category.name}
-                      </h3>
-
-                      <p className="mt-2 text-sm leading-6 text-gray-500">
-                        {category.description}
-                      </p>
-
-                      <div className="mt-5 flex items-center text-xs font-semibold text-primary">
-                        Explore
-                        <ArrowRight className="ml-1.5 h-3.5 w-3.5 transition-transform group-hover:translate-x-1" />
-                      </div>
-                    </div>
-                  </Link>
-                )
-              })}
-            </div>
-          </div>
-        </section>
-
-        {/* =====================================================
-            HOT DEALS
-        ===================================================== */}
-
-        <section className="bg-gray-50 py-20">
-          <div className="container">
-            <div className="flex flex-col justify-between gap-5 md:flex-row md:items-end">
-              <div>
-                <div className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1.5 text-xs font-bold text-primary">
-                  <Tag className="h-3.5 w-3.5" />
-                  FEATURED OFFERS
-                </div>
-
-                <h2 className="mt-4 text-3xl font-bold tracking-tight text-secondary md:text-4xl">
-                  Pharmacy hot deals
-                </h2>
-
-                <p className="mt-2 text-gray-600">
-                  Selected offers from participating pharmacies.
-                </p>
-              </div>
-
-              <Link
-                href="/pharmacy"
-                className="inline-flex items-center gap-2 text-sm font-semibold text-primary"
-              >
-                View all offers
-                <ArrowRight className="h-4 w-4" />
-              </Link>
-            </div>
-
-            <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-              {pharmacyHotDeals.map((product) => (
-                <article
-                  key={product.id}
-                  className="group overflow-hidden rounded-2xl border border-gray-200 bg-white transition-all duration-300 hover:-translate-y-1 hover:border-primary/30 hover:shadow-xl"
-                >
-                  {/* Product visual */}
-                  <div className="relative flex h-48 items-center justify-center bg-gradient-to-br from-gray-50 to-primary/[0.04]">
-                    <div className="absolute left-4 top-4 rounded-full bg-primary px-3 py-1.5 text-[10px] font-bold text-white">
-                      {product.discount}% OFF
-                    </div>
-
-                    {product.prescriptionRequired && (
-                      <div className="absolute right-4 top-4 rounded-full border border-orange-200 bg-orange-50 px-2.5 py-1.5 text-[10px] font-semibold text-orange-700">
-                        Prescription
-                      </div>
-                    )}
-
-                    <div className="flex h-24 w-24 items-center justify-center rounded-3xl bg-white shadow-lg transition-transform duration-300 group-hover:scale-105">
-                      <Pill className="h-11 w-11 text-primary/50" />
-                    </div>
-                  </div>
-
-                  {/* Product details */}
-                  <div className="p-5">
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-primary">
-                      {product.category}
-                    </p>
-
-                    <h3 className="mt-2 min-h-[48px] text-base font-bold leading-6 text-secondary">
-                      {product.name}
-                    </h3>
-
-                    <div className="mt-2 flex items-center gap-1.5">
-                      <Store className="h-3.5 w-3.5 text-gray-400" />
-                      <p className="text-xs text-gray-500">
-                        {product.pharmacyName}
-                      </p>
-                    </div>
-
-                    <div className="mt-5 flex items-end gap-2">
-                      <span className="text-xl font-bold text-primary">
-                        {product.price} EGP
-                      </span>
-
-                      <span className="mb-1 text-xs text-gray-400 line-through">
-                        {product.originalPrice} EGP
-                      </span>
-                    </div>
-
-                    <div className="mt-4 flex items-center justify-between">
-                      <div className="flex items-center gap-1.5 text-xs font-medium text-green-600">
-                        <span className="h-2 w-2 rounded-full bg-green-500" />
-                        Available
-                      </div>
-
-                      {product.prescriptionRequired && (
-                        <span className="text-[10px] font-medium text-orange-600">
-                          Rx required
-                        </span>
+                {(pharmacyCount > 0 || cats.length > 0) && (
+                  <Reveal delay={300}>
+                    <div className="mt-8 flex gap-10">
+                      {pharmacyCount > 0 && (
+                        <div>
+                          <p className="text-3xl font-bold text-secondary"><CountUp to={pharmacyCount} /></p>
+                          <p className="mt-0.5 text-xs text-gray-500">partner pharmacies</p>
+                        </div>
+                      )}
+                      {cats.length > 0 && (
+                        <div>
+                          <p className="text-3xl font-bold text-secondary"><CountUp to={cats.length} /></p>
+                          <p className="mt-0.5 text-xs text-gray-500">product categories</p>
+                        </div>
                       )}
                     </div>
+                  </Reveal>
+                )}
 
-                    <Link href="/pharmacy" className="mt-5 block">
-                      <Button
-                        variant="outline"
-                        className="w-full border-gray-300 text-secondary hover:border-primary hover:bg-primary/[0.03] hover:text-primary"
-                      >
-                        View Product
-                        <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" />
-                      </Button>
-                    </Link>
+                <Reveal delay={360}>
+                  <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+                    <Button asChild size="lg" className="w-full bg-primary text-white shadow-lg shadow-primary/15 transition-transform hover:-translate-y-0.5 hover:bg-primary/90 sm:w-auto">
+                      <Link href="/pharmacy">
+                        Explore Pharmacy
+                        <ArrowRight className="ml-2 h-4 w-4" />
+                      </Link>
+                    </Button>
+                    <Button asChild size="lg" variant="outline" className="w-full border-gray-300 bg-white text-secondary transition-transform hover:-translate-y-0.5 hover:border-primary hover:text-primary sm:w-auto">
+                      <Link href="/pharmacy#deals">
+                        View Offers
+                        <Tag className="ml-2 h-4 w-4" />
+                      </Link>
+                    </Button>
                   </div>
-                </article>
-              ))}
+                </Reveal>
+              </div>
+
+              {/* Live pharmacy panel */}
+              <Reveal delay={150} y={32}>
+                <div className="relative">
+                  <div className="pointer-events-none absolute -inset-5 rounded-[40px] bg-primary/[0.06] blur-2xl" />
+
+                  <div className="relative rounded-[28px] border border-gray-200 bg-white p-5 shadow-2xl md:p-7">
+                    <div className="flex items-center justify-between border-b border-gray-100 pb-5">
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">Pharmacy</p>
+                        <h3 className="mt-1 text-xl font-bold text-secondary">What are you looking for?</h3>
+                      </div>
+                      <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10">
+                        <ShoppingBag className="h-5 w-5 text-primary" />
+                      </div>
+                    </div>
+
+                    <div className="mt-5 grid grid-cols-2 gap-3">
+                      {categories.loading
+                        ? Array.from({ length: 4 }, (_, i) => <div key={i} className="h-[116px] animate-pulse rounded-xl bg-gray-100" />)
+                        : cats.length > 0
+                          ? cats.slice(0, 4).map((c) => {
+                            const raw = categoryNameOf(c)
+                            const Icon = categoryIcon(raw)
+                            return (
+                              <Link
+                                key={categoryKeyOf(c)}
+                                href={`/pharmacy/category/${encodeURIComponent(categoryKeyOf(c))}`}
+                                className="group rounded-xl border border-gray-100 bg-gray-50 p-4 transition-all hover:-translate-y-0.5 hover:border-primary/20 hover:bg-primary/[0.03]"
+                              >
+                                <div className="flex items-center justify-between">
+                                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-white shadow-sm">
+                                    <Icon className="h-4 w-4 text-primary" />
+                                  </div>
+                                  <ChevronRight className="h-4 w-4 text-gray-300 transition-transform group-hover:translate-x-1 group-hover:text-primary" />
+                                </div>
+                                <p className="mt-4 text-sm font-bold text-secondary">{friendlyCategory(raw)}</p>
+                                <p className="mt-1 text-[11px] leading-5 text-gray-500">
+                                  {typeof c.pharmacy_count === "number" && c.pharmacy_count > 0 ? `At ${c.pharmacy_count} pharmacies` : "Browse products"}
+                                </p>
+                              </Link>
+                            )
+                          })
+                          : (
+                            <Link href="/pharmacy" className="col-span-2 rounded-xl border border-dashed border-gray-200 p-6 text-center text-sm font-semibold text-primary">
+                              Open the pharmacy to browse products
+                            </Link>
+                          )}
+                    </div>
+
+                    <div className="mt-5 flex items-center justify-between rounded-xl bg-secondary px-4 py-4 text-white">
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/10">
+                          <Tag className="h-4 w-4 text-primary" />
+                        </div>
+                        <div>
+                          <p className="text-xs font-semibold">
+                            {deals.length > 0 ? `${deals.length} products on offer right now` : "Prices differ between pharmacies"}
+                          </p>
+                          <p className="text-[10px] text-gray-400">
+                            {deals.length > 0 ? "Reduced prices from our pharmacies" : "Compare before you choose"}
+                          </p>
+                        </div>
+                      </div>
+                      <Link href={deals.length > 0 ? "/pharmacy#deals" : "/pharmacy"} className="text-xs font-semibold text-primary hover:underline">
+                        {deals.length > 0 ? "View deals" : "Compare"}
+                      </Link>
+                    </div>
+                  </div>
+
+                  <div className="mc-float pointer-events-none absolute -bottom-5 -left-5 hidden rounded-2xl border border-gray-100 bg-white p-4 shadow-xl sm:block">
+                    <div className="flex items-center gap-3">
+                      <div className="relative flex h-10 w-10 items-center justify-center rounded-xl bg-green-50">
+                        <Store className="h-5 w-5 text-primary" />
+                        <span className="absolute -right-0.5 -top-0.5 flex h-2.5 w-2.5">
+                          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75" />
+                          <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-green-500" />
+                        </span>
+                      </div>
+                      <div>
+                        <p className="text-xs font-bold text-secondary">
+                          {pharmacyCount > 0 ? `${pharmacyCount} pharmacies connected` : "Multiple pharmacies"}
+                        </p>
+                        <p className="mt-0.5 text-[10px] text-gray-500">Live from the pharmacy catalogue</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </Reveal>
             </div>
+          </div>
+        </section>
+
+        {/* =====================================================
+            PRICE COMPARISON SHOWCASE (real product, real offers)
+        ===================================================== */}
+        {showcase && <PriceShowcase product={showcase} />}
+
+        {/* =====================================================
+            LIVE CATEGORIES
+        ===================================================== */}
+        <section className="bg-white py-20">
+          <div className="container">
+            <Reveal>
+              <div className="flex flex-col justify-between gap-5 md:flex-row md:items-end">
+                <div>
+                  <p className="text-xs font-bold tracking-[0.16em] text-primary">PHARMACY CATEGORIES</p>
+                  <h2 className="mt-3 text-3xl font-bold tracking-tight text-secondary md:text-4xl">Find what you need</h2>
+                  <p className="mt-3 max-w-xl text-gray-600">Start with a category and compare prices across our partner pharmacies.</p>
+                </div>
+                <Link href="/pharmacy#categories" className="group inline-flex items-center gap-2 text-sm font-semibold text-primary">
+                  Browse all categories
+                  <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+                </Link>
+              </div>
+            </Reveal>
+
+            <div className="mt-10 grid grid-cols-2 gap-4 lg:grid-cols-4">
+              {categories.loading
+                ? Array.from({ length: 8 }, (_, i) => <div key={i} className="h-40 animate-pulse rounded-2xl bg-gray-100" />)
+                : cats.slice(0, 8).map((c, i) => {
+                  const raw = categoryNameOf(c)
+                  const Icon = categoryIcon(raw)
+                  const h = hue(raw)
+                  return (
+                    <Reveal key={categoryKeyOf(c)} delay={(i % 4) * 80} className="h-full">
+                      <Link href={`/pharmacy/category/${encodeURIComponent(categoryKeyOf(c))}`} className="group block h-full">
+                        <div className="h-full rounded-2xl border border-gray-200 bg-white p-5 transition-all duration-300 hover:-translate-y-1.5 hover:border-primary/30 hover:shadow-lg md:p-6">
+                          <div
+                            className="flex h-12 w-12 items-center justify-center rounded-xl transition-transform duration-300 group-hover:scale-110 group-hover:-rotate-6"
+                            style={{ background: `hsl(${h} 70% 94%)`, color: `hsl(${h} 45% 34%)` }}
+                          >
+                            <Icon className="h-6 w-6" />
+                          </div>
+                          <h3 className="mt-5 font-bold text-secondary">{friendlyCategory(raw)}</h3>
+                          <p className="mt-2 text-sm leading-6 text-gray-500">
+                            {typeof c.pharmacy_count === "number" && c.pharmacy_count > 0 ? `Available at ${c.pharmacy_count} pharmacies` : "Browse available products"}
+                          </p>
+                          <div className="mt-5 flex items-center text-xs font-semibold text-primary">
+                            Explore
+                            <ArrowRight className="ml-1.5 h-3.5 w-3.5 transition-transform group-hover:translate-x-1" />
+                          </div>
+                        </div>
+                      </Link>
+                    </Reveal>
+                  )
+                })}
+            </div>
+
+            {!categories.loading && cats.length === 0 && (
+              <p className="mt-10 rounded-2xl border border-dashed border-gray-200 p-8 text-center text-sm text-gray-500">
+                {categories.error || "Categories are not available right now."}{" "}
+                <Link href="/pharmacy" className="font-semibold text-primary">Open the pharmacy</Link>
+              </p>
+            )}
+          </div>
+        </section>
+
+        {/* =====================================================
+            LIVE DEALS / TOP PICKS (full-row carousel)
+        ===================================================== */}
+        <section className="bg-gray-50 py-14">
+          <div className="container">
+            <ProductRow
+              bare
+              title={deals.length > 0 ? "Pharmacy hot deals" : "Popular at our pharmacies"}
+              subtitle={deals.length > 0 ? "Reduced prices reported by our partner pharmacies." : "Health essentials stocked by many of our partner pharmacies."}
+              href="/pharmacy"
+              hrefLabel={deals.length > 0 ? "View all offers" : "Browse the pharmacy"}
+              products={spotlight}
+              loading={spotlightLoading}
+            />
+            {!spotlightLoading && spotlight.length === 0 && feed.error && (
+              <p className="rounded-2xl border border-dashed border-gray-200 bg-white p-8 text-center text-sm text-gray-500">
+                {feed.error} <button type="button" onClick={feed.retry} className="font-semibold text-primary">Try again</button>
+              </p>
+            )}
           </div>
         </section>
 
         {/* =====================================================
             CONNECTED HEALTHCARE
         ===================================================== */}
-
         <section className="bg-white py-20 md:py-28">
           <div className="container">
             <div className="grid items-center gap-14 lg:grid-cols-2">
-              {/* Visual */}
-              <div className="relative order-2 lg:order-1">
-                <div className="absolute -inset-6 rounded-[40px] bg-primary/[0.05] blur-2xl" />
+              <Reveal className="relative order-2 lg:order-1">
+                <div className="pointer-events-none absolute -inset-6 rounded-[40px] bg-primary/[0.05] blur-2xl" />
 
                 <div className="relative rounded-[28px] border border-gray-200 bg-white p-6 shadow-xl md:p-8">
                   <div className="flex items-center justify-between border-b border-gray-100 pb-5">
                     <div>
-                      <p className="text-xs font-bold uppercase tracking-wider text-gray-400">
-                        ShifAI ecosystem
-                      </p>
-
-                      <h3 className="mt-1 text-lg font-bold text-secondary">
-                        One connected experience
-                      </h3>
+                      <p className="text-xs font-bold uppercase tracking-wider text-gray-400">ShifAI ecosystem</p>
+                      <h3 className="mt-1 text-lg font-bold text-secondary">One connected experience</h3>
                     </div>
-
                     <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
                       <HeartPulse className="h-5 w-5 text-primary" />
                     </div>
                   </div>
 
                   <div className="relative mt-7">
-                    {/* Connector */}
-                    <div className="absolute left-6 top-8 h-[calc(100%-64px)] w-px bg-primary/15" />
-
-                    <ConnectedItem
-                      icon={HeartPulse}
-                      title="Health Assessment"
-                      description="Explore symptoms and health information."
-                      active
-                    />
-
-                    <ConnectedItem
-                      icon={FlaskConical}
-                      title="Lab Results"
-                      description="Assess selected clinical measurements."
-                    />
-
-                    <ConnectedItem
-                      icon={ShoppingBag}
-                      title="Online Pharmacy"
-                      description="Browse healthcare products and offers."
-                    />
+                    <div className="pointer-events-none absolute left-6 top-8 h-[calc(100%-64px)] w-px bg-primary/15" />
+                    <ConnectedItem icon={HeartPulse} title="Health Assessment" description="Explore symptoms and health information." active />
+                    <ConnectedItem icon={FlaskConical} title="Lab Results" description="Assess selected clinical measurements." />
+                    <ConnectedItem icon={ShoppingBag} title="Online Pharmacy" description="Compare real prices and availability across pharmacies." />
                   </div>
 
                   <div className="mt-5 rounded-2xl bg-gray-50 p-4">
                     <div className="flex items-start gap-3">
                       <ShieldCheck className="mt-0.5 h-5 w-5 text-primary" />
-
                       <div>
-                        <p className="text-sm font-semibold text-secondary">
-                          Designed as one platform
-                        </p>
-
+                        <p className="text-sm font-semibold text-secondary">Designed as one platform</p>
                         <p className="mt-1 text-xs leading-5 text-gray-500">
-                          Move between health tools and pharmacy services
-                          without leaving the ShifAI experience.
+                          Move between health tools and pharmacy services without leaving the ShifAI experience.
                         </p>
                       </div>
                     </div>
                   </div>
                 </div>
-              </div>
+              </Reveal>
 
-              {/* Copy */}
               <div className="order-1 lg:order-2">
-                <p className="text-xs font-bold tracking-[0.16em] text-primary">
-                  CONNECTED CARE
-                </p>
-
-                <h2 className="mt-4 max-w-xl text-4xl font-bold leading-tight tracking-tight text-secondary md:text-5xl">
-                  More than individual tools.
-                  <span className="block text-primary">
-                    A complete digital experience.
-                  </span>
-                </h2>
-
-                <p className="mt-6 max-w-xl text-base leading-8 text-gray-600">
-                  ShifAI brings health assessments and pharmacy access into one
-                  organized platform, making it easier for users to find the
-                  right digital health service and discover relevant healthcare
-                  products.
-                </p>
+                <Reveal>
+                  <p className="text-xs font-bold tracking-[0.16em] text-primary">CONNECTED CARE</p>
+                  <h2 className="mt-4 max-w-xl text-4xl font-bold leading-tight tracking-tight text-secondary md:text-5xl">
+                    More than individual tools.
+                    <span className="block text-primary">A complete digital experience.</span>
+                  </h2>
+                  <p className="mt-6 max-w-xl text-base leading-8 text-gray-600">
+                    ShifAI brings health assessments and pharmacy access into one organized platform, making it easier to
+                    find the right digital health service and the right price for the products you need.
+                  </p>
+                </Reveal>
 
                 <div className="mt-8 space-y-5">
-                  <BenefitRow
-                    icon={Brain}
-                    title="AI-assisted health tools"
-                    description="Use specialized AI-powered tools for symptoms, laboratory data and medical images."
-                  />
-
-                  <BenefitRow
-                    icon={ShoppingBag}
-                    title="Integrated online pharmacy"
-                    description="Browse medicines, supplements, personal care products and selected offers."
-                  />
-
-                  <BenefitRow
-                    icon={ShieldCheck}
-                    title="Designed with privacy in mind"
-                    description="Keep the experience organized around secure access and responsible healthcare information."
-                  />
+                  <Reveal delay={80}><BenefitRow icon={Brain} title="AI-assisted health tools" description="Use specialized AI-powered tools for symptoms, laboratory data and medical images." /></Reveal>
+                  <Reveal delay={160}><BenefitRow icon={ShoppingBag} title="Integrated online pharmacy" description="Browse medicines and healthcare products and compare prices across partner pharmacies." /></Reveal>
+                  <Reveal delay={240}><BenefitRow icon={ShieldCheck} title="Designed with privacy in mind" description="Keep the experience organized around secure access and responsible healthcare information." /></Reveal>
                 </div>
 
-                <div className="mt-8">
-                  <Link href="/services">
-                    <Button
-                      variant="outline"
-                      className="border-gray-300 text-secondary hover:border-primary hover:text-primary"
-                    >
-                      Explore ShifAI
-                      <ArrowRight className="ml-2 h-4 w-4" />
+                <Reveal delay={300}>
+                  <div className="mt-8">
+                    <Button asChild variant="outline" className="border-gray-300 text-secondary transition-transform hover:-translate-y-0.5 hover:border-primary hover:text-primary">
+                      <Link href="/services">
+                        Explore ShifAI
+                        <ArrowRight className="ml-2 h-4 w-4" />
+                      </Link>
                     </Button>
-                  </Link>
-                </div>
+                  </div>
+                </Reveal>
               </div>
             </div>
           </div>
@@ -1098,47 +768,36 @@ export default function Home() {
         {/* =====================================================
             HOW IT WORKS
         ===================================================== */}
-
         <section className="bg-secondary py-20 text-white md:py-24">
           <div className="container">
-            <SectionHeading
-              dark
-              eyebrow="HOW IT WORKS"
-              title="Healthcare made easier to navigate"
-              description="A simple flow from your information to an understandable result."
-            />
+            <Reveal>
+              <SectionHeading
+                dark
+                eyebrow="HOW IT WORKS"
+                title="Healthcare made easier to navigate"
+                description="A simple flow from your information to an understandable result."
+              />
+            </Reveal>
 
             <div className="mt-14 grid gap-6 md:grid-cols-3">
               {steps.map((step, index) => {
                 const Icon = step.icon
-
                 return (
-                  <div key={step.number} className="relative">
-                    {/* Connector */}
+                  <Reveal key={step.number} delay={index * 120} className="relative h-full">
                     {index < steps.length - 1 && (
-                      <div className="absolute left-[calc(100%-20px)] top-9 hidden h-px w-[40px] bg-white/10 md:block lg:w-[70px]" />
+                      <div className="pointer-events-none absolute left-[calc(100%-20px)] top-9 hidden h-px w-[40px] bg-white/10 md:block lg:w-[70px]" />
                     )}
-
-                    <div className="h-full rounded-2xl border border-white/10 bg-white/[0.04] p-7 transition-colors hover:bg-white/[0.07]">
+                    <div className="h-full rounded-2xl border border-white/10 bg-white/[0.04] p-7 transition-all duration-300 hover:-translate-y-1 hover:bg-white/[0.07]">
                       <div className="flex items-center justify-between">
-                        <span className="text-sm font-bold tracking-widest text-primary">
-                          {step.number}
-                        </span>
-
+                        <span className="text-sm font-bold tracking-widest text-primary">{step.number}</span>
                         <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10">
                           <Icon className="h-5 w-5 text-primary" />
                         </div>
                       </div>
-
-                      <h3 className="mt-8 text-xl font-bold">
-                        {step.title}
-                      </h3>
-
-                      <p className="mt-3 text-sm leading-7 text-gray-400">
-                        {step.description}
-                      </p>
+                      <h3 className="mt-8 text-xl font-bold">{step.title}</h3>
+                      <p className="mt-3 text-sm leading-7 text-gray-400">{step.description}</p>
                     </div>
-                  </div>
+                  </Reveal>
                 )
               })}
             </div>
@@ -1148,78 +807,60 @@ export default function Home() {
         {/* =====================================================
             FINAL CTA
         ===================================================== */}
-
         <section className="bg-white py-20 md:py-24">
           <div className="container">
-            <div className="relative overflow-hidden rounded-[28px] bg-primary px-7 py-12 text-white shadow-2xl shadow-primary/20 md:px-12 md:py-16">
-              <div className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-white/10 blur-2xl" />
-              <div className="pointer-events-none absolute -bottom-32 -left-20 h-64 w-64 rounded-full bg-secondary/20 blur-2xl" />
+            <Reveal>
+              <div className="relative overflow-hidden rounded-[28px] bg-primary px-7 py-12 text-white shadow-2xl shadow-primary/20 md:px-12 md:py-16">
+                <div className="mc-float-slow pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-white/10 blur-2xl" />
+                <div className="pointer-events-none absolute -bottom-32 -left-20 h-64 w-64 rounded-full bg-secondary/20 blur-2xl" />
 
-              <div className="relative grid items-center gap-10 lg:grid-cols-[1fr_auto]">
-                <div className="max-w-2xl">
-                  <p className="text-xs font-bold tracking-[0.18em] text-white/70">
-                    START WITH SHIFAI
-                  </p>
+                <div className="relative grid items-center gap-10 lg:grid-cols-[1fr_auto]">
+                  <div className="max-w-2xl">
+                    <p className="text-xs font-bold tracking-[0.18em] text-white/70">START WITH SHIFAI</p>
+                    <h2 className="mt-4 text-3xl font-bold leading-tight md:text-4xl">Take the next step toward understanding your health.</h2>
+                    <p className="mt-4 max-w-xl leading-7 text-white/80">
+                      Explore an assessment, compare prices in the online pharmacy, or simply start discovering what ShifAI can offer.
+                    </p>
+                  </div>
 
-                  <h2 className="mt-4 text-3xl font-bold leading-tight md:text-4xl">
-                    Take the next step toward understanding your health.
-                  </h2>
-
-                  <p className="mt-4 max-w-xl leading-7 text-white/80">
-                    Explore an assessment, browse the online pharmacy, or
-                    simply start discovering what ShifAI can offer.
-                  </p>
-                </div>
-
-                <div className="flex flex-col gap-3 sm:flex-row lg:flex-col">
-                  <Link href="/symptom-checker">
-                    <Button
-                      size="lg"
-                      className="w-full bg-white text-primary hover:bg-gray-100 sm:w-auto lg:w-full"
-                    >
-                      Start Assessment
-                      <ArrowRight className="ml-2 h-4 w-4" />
+                  <div className="flex flex-col gap-3 sm:flex-row lg:flex-col">
+                    <Button asChild size="lg" className="w-full bg-white text-primary transition-transform hover:-translate-y-0.5 hover:bg-gray-100 sm:w-auto lg:w-full">
+                      <Link href="/symptom-checker">
+                        Start Assessment
+                        <ArrowRight className="ml-2 h-4 w-4" />
+                      </Link>
                     </Button>
-                  </Link>
-
-                  <Link href="/pharmacy">
-                    <Button
-                      size="lg"
-                      variant="outline"
-                      className="w-full border-white/30 bg-transparent text-white hover:bg-white hover:text-primary sm:w-auto"
-                    >
-                      <ShoppingBag className="mr-2 h-4 w-4" />
-                      Visit Pharmacy
+                    <Button asChild size="lg" variant="outline" className="w-full border-white/30 bg-transparent text-white transition-transform hover:-translate-y-0.5 hover:bg-white hover:text-primary sm:w-auto">
+                      <Link href="/pharmacy">
+                        <ShoppingBag className="mr-2 h-4 w-4" />
+                        Visit Pharmacy
+                      </Link>
                     </Button>
-                  </Link>
+                  </div>
                 </div>
               </div>
-            </div>
+            </Reveal>
           </div>
         </section>
 
         {/* =====================================================
             TESTIMONIALS
         ===================================================== */}
-
         <section className="border-t border-gray-100 bg-gray-50 py-20">
           <div className="container">
-            <SectionHeading
-              eyebrow="USER EXPERIENCE"
-              title="Designed to feel simple"
-              description="A healthcare platform should make information easier to navigate, not harder."
-            />
+            <Reveal>
+              <SectionHeading
+                eyebrow="USER EXPERIENCE"
+                title="Designed to feel simple"
+                description="A healthcare platform should make information easier to navigate, not harder."
+              />
+            </Reveal>
 
             <div className="mt-12 grid gap-6 md:grid-cols-3">
-              {testimonials.map((testimonial) => (
-                <TestimonialCard
-                  key={testimonial.name}
-                  name={testimonial.name}
-                  role={testimonial.role}
-                  content={testimonial.content}
-                  rating={testimonial.rating}
-                  avatar={testimonial.avatar}
-                />
+              {testimonials.map((t, i) => (
+                <Reveal key={t.name} delay={i * 100} className="h-full">
+                  <TestimonialCard name={t.name} role={t.role} content={t.content} rating={t.rating} avatar={t.avatar} />
+                </Reveal>
               ))}
             </div>
           </div>
@@ -1229,25 +870,19 @@ export default function Home() {
       {/* =====================================================
           FOOTER
       ===================================================== */}
-
       <footer className="bg-secondary text-white">
         <div className="container py-14">
           <div className="grid gap-10 md:grid-cols-[1.5fr_repeat(3,1fr)]">
-            {/* Brand */}
             <div className="max-w-sm">
               <Logo />
-
               <p className="mt-5 text-sm leading-7 text-gray-400">
-                ShifAI brings AI-powered health assessments and online pharmacy
-                access together in one digital healthcare experience.
+                ShifAI brings AI-powered health assessments and online pharmacy access together in one digital healthcare experience.
               </p>
-
               <div className="mt-6 flex flex-wrap gap-3">
                 <div className="flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-gray-300">
                   <ShieldCheck className="h-3.5 w-3.5 text-primary" />
                   Secure platform
                 </div>
-
                 <div className="flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-gray-300">
                   <Sparkles className="h-3.5 w-3.5 text-primary" />
                   AI-powered
@@ -1255,7 +890,6 @@ export default function Home() {
               </div>
             </div>
 
-            {/* Health */}
             <FooterColumn
               title="Health"
               links={[
@@ -1267,20 +901,12 @@ export default function Home() {
               ]}
             />
 
-            {/* Pharmacy */}
             <FooterColumn
               title="Pharmacy"
-              links={[
-                ["Pharmacy Home", "/pharmacy"],
-                ["Medicines", "/pharmacy"],
-                ["Vitamins & Supplements", "/pharmacy"],
-                ["Personal Care", "/pharmacy"],
-                ["Hot Deals", "/pharmacy"],
-              ]}
+              links={footerPharmacyLinks}
               icon={<ShoppingBag className="h-4 w-4 text-primary" />}
             />
 
-            {/* Company */}
             <FooterColumn
               title="Company"
               links={[
@@ -1294,21 +920,113 @@ export default function Home() {
           </div>
 
           <div className="mt-12 flex flex-col gap-5 border-t border-white/10 pt-7 md:flex-row md:items-center md:justify-between">
-            <p className="text-xs text-gray-500">
-              © 2026 ShifAI. All rights reserved.
-            </p>
-
+            <p className="text-xs text-gray-500">© 2026 ShifAI. All rights reserved.</p>
             <div className="max-w-2xl text-left text-[11px] leading-5 text-gray-500 md:text-right">
               <strong className="text-gray-400">Medical Disclaimer:</strong>{" "}
-              ShifAI's digital health tools are intended to provide
-              informational and AI-assisted assessments and are not a
-              substitute for professional medical advice, diagnosis, or
-              treatment.
+              ShifAI's digital health tools are intended to provide informational and AI-assisted assessments and are not a
+              substitute for professional medical advice, diagnosis, or treatment.
             </div>
           </div>
         </div>
       </footer>
     </div>
+  )
+}
+
+/* =========================================================
+   PRICE SHOWCASE — built from a real product's real offers
+========================================================= */
+
+function PriceShowcase({ product }: { product: MarketProduct }) {
+  const [ref, seen] = useInView<HTMLDivElement>("0px")
+
+  const offers = useMemo(
+    () => product.offers.filter((o) => o.price != null).sort((a, b) => (a.price as number) - (b.price as number)),
+    [product]
+  )
+  const shown = offers.slice(0, 5)
+  const max = product.maxPrice ?? 0
+  const min = product.minPrice ?? 0
+  const save = max - min
+  const pct = max > 0 ? Math.round((save / max) * 100) : 0
+  if (shown.length < 2 || max <= 0) return null
+
+  return (
+    <section className="bg-white py-20 md:py-24">
+      <div className="container">
+        <div className="grid items-center gap-12 lg:grid-cols-[0.85fr_1.15fr]">
+          <Reveal>
+            <p className="text-xs font-bold tracking-[0.16em] text-primary">SEE THE DIFFERENCE</p>
+            <h2 className="mt-4 text-3xl font-bold leading-tight tracking-tight text-secondary md:text-4xl">
+              Same product. <span className="text-primary">Different prices.</span>
+            </h2>
+            <p className="mt-5 max-w-md leading-8 text-gray-600">
+              Pharmacies set their own prices. MediCheck lines them up so you can see where a product costs the least
+              before you go.
+            </p>
+            <Button asChild size="lg" className="mt-7 bg-primary text-white shadow-lg shadow-primary/15 transition-transform hover:-translate-y-0.5 hover:bg-primary/90">
+              <Link href={productHref(product)}>
+                Compare all {product.offerCount} pharmacies
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </Link>
+            </Button>
+          </Reveal>
+
+          <Reveal delay={120} y={32}>
+            <div ref={ref} className="rounded-[28px] border border-gray-200 bg-white p-6 shadow-xl md:p-8">
+              <div className="flex items-center gap-4 border-b border-gray-100 pb-5">
+                <ProductImage
+                  src={product.imageUrl} name={product.name} category={product.category}
+                  isMedicine={product.isMedicine} isFridge={product.isFridge} className="h-16 w-16 shrink-0 rounded-2xl"
+                />
+                <div className="min-w-0">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-primary">
+                    {product.category ? friendlyCategory(product.category) : "Healthcare"}
+                  </p>
+                  <h3 className="mt-1 truncate text-lg font-bold text-secondary">{product.name}</h3>
+                  <p className="text-xs text-gray-500">Price at {product.offerCount} pharmacies</p>
+                </div>
+              </div>
+
+              <ul className="mt-6 space-y-4">
+                {shown.map((o, i) => {
+                  const price = o.price as number
+                  return (
+                    <li key={`${o.pharmacyId}-${o.productId}`}>
+                      <div className="flex items-center justify-between gap-3 text-sm">
+                        <span className="flex min-w-0 items-center gap-2 font-semibold text-secondary">
+                          <Store className="h-4 w-4 shrink-0 text-gray-400" />
+                          <span className="truncate">{o.pharmacyName}</span>
+                          {i === 0 && <span className="shrink-0 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">Lowest</span>}
+                        </span>
+                        <span className={`shrink-0 font-bold ${i === 0 ? "text-primary" : "text-secondary"}`}>{formatEGP(price)} EGP</span>
+                      </div>
+                      <div className="mt-2 h-2.5 overflow-hidden rounded-full bg-gray-100">
+                        <div
+                          className={`h-full rounded-full ${i === 0 ? "bg-primary" : "bg-gray-300"}`}
+                          style={{
+                            width: seen ? `${Math.max(6, (price / max) * 100)}%` : "0%",
+                            transition: `width 900ms cubic-bezier(.2,.7,.2,1) ${i * 120}ms`,
+                          }}
+                        />
+                      </div>
+                    </li>
+                  )
+                })}
+              </ul>
+
+              <div className="mt-6 flex items-center gap-3 rounded-2xl bg-emerald-50 p-4">
+                <Tag className="h-5 w-5 shrink-0 text-emerald-600" />
+                <p className="text-sm font-semibold text-emerald-800">
+                  Choosing the lowest price saves up to {formatEGP(save)} EGP{pct >= 1 ? ` (${pct}%)` : ""}.
+                </p>
+              </div>
+              <p className="mt-3 text-[11px] text-gray-400">Prices as last synchronised by each pharmacy. Confirm availability with the pharmacy.</p>
+            </div>
+          </Reveal>
+        </div>
+      </div>
+    </section>
   )
 }
 
@@ -1329,80 +1047,22 @@ function SectionHeading({
 }) {
   return (
     <div className="mx-auto max-w-2xl text-center">
-      <p
-        className={`text-xs font-bold tracking-[0.18em] ${dark ? "text-primary" : "text-primary"
-          }`}
-      >
-        {eyebrow}
-      </p>
-
-      <h2
-        className={`mt-4 text-3xl font-bold tracking-tight md:text-4xl ${dark ? "text-white" : "text-secondary"
-          }`}
-      >
-        {title}
-      </h2>
-
-      <p
-        className={`mt-4 leading-7 ${dark ? "text-gray-400" : "text-gray-600"
-          }`}
-      >
-        {description}
-      </p>
+      <p className="text-xs font-bold tracking-[0.18em] text-primary">{eyebrow}</p>
+      <h2 className={`mt-4 text-3xl font-bold tracking-tight md:text-4xl ${dark ? "text-white" : "text-secondary"}`}>{title}</h2>
+      <p className={`mt-4 leading-7 ${dark ? "text-gray-400" : "text-gray-600"}`}>{description}</p>
     </div>
   )
 }
 
-function PlatformPoint({
-  number,
-  title,
-  description,
-}: {
-  number: string
-  title: string
-  description: string
-}) {
+function PlatformPoint({ number, title, description }: { number: string; title: string; description: string }) {
   return (
     <div className="flex gap-4">
-      <span className="text-xs font-bold tracking-widest text-primary">
-        {number}
-      </span>
-
+      <span className="text-xs font-bold tracking-widest text-primary">{number}</span>
       <div>
         <h3 className="font-bold text-secondary">{title}</h3>
-
-        <p className="mt-1 text-sm leading-6 text-gray-500">
-          {description}
-        </p>
+        <p className="mt-1 text-sm leading-6 text-gray-500">{description}</p>
       </div>
     </div>
-  )
-}
-
-function MiniDashboardRow({
-  icon: Icon,
-  label,
-  href,
-}: {
-  icon: React.ComponentType<{ className?: string }>
-  label: string
-  href: string
-}) {
-  return (
-    <Link
-      href={href}
-      className="group flex items-center justify-between rounded-xl border border-gray-100 bg-gray-50 px-3 py-2.5 transition-colors hover:border-primary/20 hover:bg-primary/[0.03]"
-    >
-      <div className="flex items-center gap-2.5">
-        <Icon className="h-4 w-4 text-primary" />
-
-        <span className="text-xs font-medium text-secondary">
-          {label}
-        </span>
-      </div>
-
-      <ChevronRight className="h-3.5 w-3.5 text-gray-300 transition-transform group-hover:translate-x-0.5 group-hover:text-primary" />
-    </Link>
   )
 }
 
@@ -1420,13 +1080,9 @@ function BenefitRow({
       <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-primary/10">
         <Icon className="h-5 w-5 text-primary" />
       </div>
-
       <div>
         <h3 className="font-bold text-secondary">{title}</h3>
-
-        <p className="mt-1 text-sm leading-6 text-gray-600">
-          {description}
-        </p>
+        <p className="mt-1 text-sm leading-6 text-gray-600">{description}</p>
       </div>
     </div>
   )
@@ -1446,23 +1102,14 @@ function ConnectedItem({
   return (
     <div className="relative mb-5 flex gap-4 last:mb-0">
       <div
-        className={`relative z-10 flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl border ${active
-            ? "border-primary/20 bg-primary/10"
-            : "border-gray-200 bg-white"
+        className={`relative z-10 flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl border ${active ? "border-primary/20 bg-primary/10" : "border-gray-200 bg-white"
           }`}
       >
-        <Icon
-          className={`h-5 w-5 ${active ? "text-primary" : "text-gray-400"
-            }`}
-        />
+        <Icon className={`h-5 w-5 ${active ? "text-primary" : "text-gray-400"}`} />
       </div>
-
       <div className="pt-1">
         <h4 className="text-sm font-bold text-secondary">{title}</h4>
-
-        <p className="mt-1 text-xs leading-5 text-gray-500">
-          {description}
-        </p>
+        <p className="mt-1 text-xs leading-5 text-gray-500">{description}</p>
       </div>
     </div>
   )
@@ -1483,14 +1130,10 @@ function FooterColumn({
         {icon}
         {title}
       </h3>
-
       <ul className="mt-5 space-y-3">
         {links.map(([label, href]) => (
           <li key={label}>
-            <Link
-              href={href}
-              className="text-sm text-gray-400 transition-colors hover:text-white"
-            >
+            <Link href={href} className="text-sm text-gray-400 transition-colors hover:text-white">
               {label}
             </Link>
           </li>

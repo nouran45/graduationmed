@@ -4,13 +4,27 @@
 // Matches the existing site design system exactly.
 
 import Link from "next/link"
+import type { ReactNode } from "react"
 import { ArrowRight, ChevronLeft, Heart, Droplets, Activity, AlertCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Logo } from "@/components/logo"
 import { AuthStateHandler } from "@/components/auth-state-handler"
 
-const ASSESSMENTS = [
+type Assessment = {
+    title: string
+    description: string
+    features: string[]
+    href: string
+    color: string
+    bg: string
+    border: string
+    badge: string
+    accuracy?: string
+    auc?: string | null
+    icon: ReactNode
+}
+const ASSESSMENTS: Assessment[] = [
     {
         title: "Heart Disease Risk",
         description: "Assess your cardiovascular risk using 11 clinical indicators including blood pressure, cholesterol, ST depression, and exercise-induced angina.",

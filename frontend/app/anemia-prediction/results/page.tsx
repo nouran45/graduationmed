@@ -70,7 +70,7 @@ export default function AnemiaResults() {
 
     let label = results.risk_level || "Unknown";
     let color = "text-gray-600";
-    let icon: JSX.Element = <Clock className="h-8 w-8 text-gray-600" />;
+    let icon = <Clock className="h-8 w-8 text-gray-600" />;
 
     if (level === "low") {
       color = "text-green-600";

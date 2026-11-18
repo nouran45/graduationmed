@@ -1,4 +1,4 @@
-from pymongo.mongo_client import MongoClient
+﻿from pymongo.mongo_client import MongoClient
 from pymongo.server_api import ServerApi
 from models import UserSignup, MedicalHistory, UserLogin, UserWithHistoryResponse, UserWithHistoryResponse
 
@@ -18,18 +18,19 @@ from fastapi import HTTPException, Depends
 from typing import List, Dict, Any
 
 from routers.prescriptions import router as prescriptions_router
+from routers.pharmacy_catalogue import router as pharmacy_catalogue_router
 
 
 import os
 import logging
 import tempfile
 
-# ── Skin disease predictors ────────────────────────────────────────────────
-# predict.py:              base ViT model  → /predict  (clean images)
-# predict_skin_defense.py: Phase F pipeline → /predict-skin-defense (any image)
+# â”€â”€ Skin disease predictors â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# predict.py:              base ViT model  â†’ /predict  (clean images)
+# predict_skin_defense.py: Phase F pipeline â†’ /predict-skin-defense (any image)
 from utils.predict import predict_skin_disease
 from utils.predict_skin_defense import predict_skin_defense, get_pipeline_status
-# ──────────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 import requests
 from typing import Optional
@@ -81,9 +82,9 @@ users = db["users"]
 history_collection = db["history"]
 try:
     client.admin.command('ping')
-    print("✅ MongoDB Atlas connection established.")
+    print("âœ… MongoDB Atlas connection established.")
 except Exception as e:
-    print(f"❌ Failed to connect to MongoDB Atlas: {e}")
+    print(f"âŒ Failed to connect to MongoDB Atlas: {e}")
 
 # CORS Configuration
 app.add_middleware(
@@ -142,6 +143,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
 # Routes
 
 app.include_router(prescriptions_router)
+app.include_router(pharmacy_catalogue_router)
 
 @app.get("/")
 def home():
@@ -237,7 +239,7 @@ async def read_users_me(current_user: Dict[str, Any] = Depends(get_current_user)
 
 
 # =============================================================================
-# /predict  — Base ViT skin disease endpoint (clean images)
+# /predict  â€” Base ViT skin disease endpoint (clean images)
 # =============================================================================
 @app.post("/predict")
 async def predict(
@@ -257,7 +259,7 @@ async def predict(
                 detail="Invalid file format. Supported: .jpg, .jpeg, .png"
             )
 
-        logger.info(f"🔬 Skin prediction (base ViT) from user: {current_user['email']}")
+        logger.info(f"ðŸ”¬ Skin prediction (base ViT) from user: {current_user['email']}")
 
         with tempfile.NamedTemporaryFile(delete=False, suffix=file_ext) as temp_file:
             content = await file.read()
@@ -280,14 +282,14 @@ async def predict(
             "created_at": datetime.now(timezone.utc)
         }
         history_collection.insert_one(history_record)
-        logger.info(f"✅ Base ViT prediction: {result.get('disease')} ({result.get('confidence', 0):.2%})")
+        logger.info(f"âœ… Base ViT prediction: {result.get('disease')} ({result.get('confidence', 0):.2%})")
 
         return result
 
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"❌ Skin prediction error: {str(e)}")
+        logger.error(f"âŒ Skin prediction error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Server error: {str(e)}")
     finally:
         if temp_path and os.path.exists(temp_path):
@@ -295,7 +297,7 @@ async def predict(
 
 
 # =============================================================================
-# /predict-skin-defense  — Phase F complete adversarial defense pipeline
+# /predict-skin-defense  â€” Phase F complete adversarial defense pipeline
 # =============================================================================
 @app.post("/predict-skin-defense")
 async def predict_skin_defense_endpoint(
@@ -309,7 +311,7 @@ async def predict_skin_defense_endpoint(
     or dense adversarial attack), routes it to the correct denoiser, then
     classifies the denoised image with the ViT.
 
-    Pipeline: DenseNet121 detector → [skip | SUNet v1 sparse | SUNet v3] → ViT
+    Pipeline: DenseNet121 detector â†’ [skip | SUNet v1 sparse | SUNet v3] â†’ ViT
 
     Response includes:
       - disease / diagnosis / confidence: classification result
@@ -327,8 +329,8 @@ async def predict_skin_defense_endpoint(
                 detail="Invalid file format. Supported: .jpg, .jpeg, .png"
             )
 
-        logger.info(f"🛡️  Phase F defense request from user: {current_user['email']}")
-        logger.info(f"📁 File: {file.filename}")
+        logger.info(f"ðŸ›¡ï¸  Phase F defense request from user: {current_user['email']}")
+        logger.info(f"ðŸ“ File: {file.filename}")
 
         with tempfile.NamedTemporaryFile(delete=False, suffix=file_ext) as temp_file:
             content = await file.read()
@@ -374,7 +376,7 @@ async def predict_skin_defense_endpoint(
         history_collection.insert_one(history_record)
 
         logger.info(
-            f"✅ Phase F prediction: {result.get('disease')} | "
+            f"âœ… Phase F prediction: {result.get('disease')} | "
             f"route={result.get('route_used')} | "
             f"confidence={result.get('confidence', 0):.2%}"
         )
@@ -384,7 +386,7 @@ async def predict_skin_defense_endpoint(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"❌ Phase F prediction error: {str(e)}\n{traceback.format_exc()}")
+        logger.error(f"âŒ Phase F prediction error: {str(e)}\n{traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=f"Server error: {str(e)}")
     finally:
         if temp_path and os.path.exists(temp_path):
@@ -395,7 +397,7 @@ async def predict_skin_defense_endpoint(
 async def skin_defense_health():
     """
     Health check for the Phase F pipeline.
-    Does NOT load models — safe to call at any time.
+    Does NOT load models â€” safe to call at any time.
     Returns model file paths and whether models are currently loaded.
     """
     status_info = get_pipeline_status()
@@ -613,7 +615,7 @@ async def predict_diabetes_endpoint(
     data: DiabetesInput, 
     current_user: dict = Depends(get_current_user)
 ):
-    print("🔍 Diabetes prediction request received")
+    print("ðŸ” Diabetes prediction request received")
     
     try:
         input_data = data.dict()
@@ -649,7 +651,7 @@ async def predict_kidney_endpoint(
     current_user: dict = Depends(get_current_user)
 ):
     """Predict chronic kidney disease based on patient data"""
-    logger.info("🔍 Kidney disease prediction request received")
+    logger.info("ðŸ” Kidney disease prediction request received")
     
     try:
         input_data = data.dict()
@@ -700,15 +702,15 @@ async def predict_fracture_endpoint(
                 detail=f"Invalid file format. Supported formats: {', '.join(valid_extensions)}"
             )
         
-        logger.info(f"🩻 Fracture detection request from user: {current_user['email']}")
-        logger.info(f"📁 File: {file.filename}, Type: {file.content_type}")
+        logger.info(f"ðŸ©» Fracture detection request from user: {current_user['email']}")
+        logger.info(f"ðŸ“ File: {file.filename}, Type: {file.content_type}")
         
         with tempfile.NamedTemporaryFile(delete=False, suffix=file_ext) as temp_file:
             content = await file.read()
             temp_file.write(content)
             temp_path = temp_file.name
         
-        logger.info(f"💾 Saved temp file: {temp_path}")
+        logger.info(f"ðŸ’¾ Saved temp file: {temp_path}")
         
         result = predict_fracture(temp_path)
         
@@ -723,7 +725,7 @@ async def predict_fracture_endpoint(
         conf_value = float(result.get("confidence", 0))
         conf_percent = conf_value * 100 if 0 <= conf_value <= 1 else conf_value
         logger.info(
-            f"✅ Prediction successful: {result.get('diagnosis', 'Unknown')} "
+            f"âœ… Prediction successful: {result.get('diagnosis', 'Unknown')} "
             f"(confidence: {conf_percent:.1f}%)"
         )
         
@@ -735,14 +737,14 @@ async def predict_fracture_endpoint(
             "created_at": datetime.now(timezone.utc)
         }
         history_collection.insert_one(history_record)
-        logger.info("💾 Saved to history")
+        logger.info("ðŸ’¾ Saved to history")
         
         return result
         
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"❌ Fracture prediction error: {str(e)}")
+        logger.error(f"âŒ Fracture prediction error: {str(e)}")
         raise HTTPException(
             status_code=500,
             detail=f"Server error: {str(e)}"
@@ -750,7 +752,7 @@ async def predict_fracture_endpoint(
     finally:
         if 'temp_path' in locals() and os.path.exists(temp_path):
             os.unlink(temp_path)
-            logger.info(f"🗑️ Cleaned up temp file")
+            logger.info(f"ðŸ—‘ï¸ Cleaned up temp file")
 
 
 
@@ -759,7 +761,7 @@ async def predict_heart_endpoint(
     data: HeartDiseaseInput,
     current_user: dict = Depends(get_current_user)
 ):
-    logger.info("❤️ Heart disease prediction request received")
+    logger.info("â¤ï¸ Heart disease prediction request received")
  
     try:
         input_data = data.dict()
@@ -772,7 +774,7 @@ async def predict_heart_endpoint(
             )
  
         logger.info(
-            f"✅ Prediction: {result['disease']} "
+            f"âœ… Prediction: {result['disease']} "
             f"(confidence: {result['confidence']}% | "
             f"threshold: {result.get('threshold_used', 'N/A')})"
         )
@@ -789,14 +791,14 @@ async def predict_heart_endpoint(
             "created_at": datetime.now(timezone.utc)
         }
         history_collection.insert_one(history_record)
-        logger.info("💾 Saved to history")
+        logger.info("ðŸ’¾ Saved to history")
  
         return result
  
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"❌ Heart disease prediction error: {str(e)}\n{traceback.format_exc()}")
+        logger.error(f"âŒ Heart disease prediction error: {str(e)}\n{traceback.format_exc()}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Server error: {str(e)}"
@@ -809,7 +811,7 @@ async def predict_anemia_endpoint(
     current_user: dict = Depends(get_current_user)
 ) -> AnemiaResponse:
     """Predict anemia based on blood work parameters"""
-    logger.info("🩸 Anemia prediction request received")
+    logger.info("ðŸ©¸ Anemia prediction request received")
     
     try:
         input_data = data.dict()
@@ -818,7 +820,7 @@ async def predict_anemia_endpoint(
         if not result.get("success", False):
             raise HTTPException(status_code=400, detail=result.get("error", "Anemia prediction failed"))
         
-        logger.info(f"✅ Prediction successful: {result['disease']}")
+        logger.info(f"âœ… Prediction successful: {result['disease']}")
         
         recommendations = generate_anemia_recommendations(result['has_anemia'], input_data)
         result['recommendations'] = recommendations
@@ -836,5 +838,5 @@ async def predict_anemia_endpoint(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"❌ Anemia prediction error: {str(e)}")
+        logger.error(f"âŒ Anemia prediction error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Server error: {str(e)}")

@@ -1,13 +1,12 @@
 "use client"
 
 import { useState } from "react"
+import dynamic from "next/dynamic"
 import { ArrowUpRight, Users, Activity, FileText, AlertTriangle, Filter } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
-import { Line, LineChart, Bar, BarChart, XAxis, YAxis, CartesianGrid, Legend, ResponsiveContainer } from "recharts"
 
 // this is some mock data added for now
 const userActivityData = [
@@ -47,6 +46,16 @@ const recentUsers = [
   { id: 5, name: "Lisa Walker", email: "lisa.w@example.com", registered: "1 month ago", status: "active" },
 ]
 
+
+const AdminCharts = dynamic(() => import("@/components/admin/admin-charts"), {
+  ssr: false,
+  loading: () => (
+    <div className="mb-8 grid grid-cols-1 gap-6 lg:grid-cols-2">
+      <div className="h-[360px] animate-pulse rounded-xl bg-gray-100" />
+      <div className="h-[360px] animate-pulse rounded-xl bg-gray-100" />
+    </div>
+  ),
+})
 export default function AdminDashboard() {
   const [period, setPeriod] = useState("7d")
 
@@ -185,105 +194,8 @@ export default function AdminDashboard() {
           </CardContent>
         </Card>
       </div>
+      <AdminCharts />
 
-      {/* Charts section */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle>User Activity</CardTitle>
-                <CardDescription>User logins and sign-ups over time</CardDescription>
-              </div>
-              <Select defaultValue="7d">
-                <SelectTrigger className="w-[120px]">
-                  <SelectValue placeholder="Select Period" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="1d">Last 24 hours</SelectItem>
-                  <SelectItem value="7d">Last 7 days</SelectItem>
-                  <SelectItem value="30d">Last 30 days</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <ChartContainer
-              config={{
-                logins: {
-                  label: "Logins",
-                  color: "hsl(var(--chart-1))",
-                },
-                signups: {
-                  label: "Sign-ups",
-                  color: "hsl(var(--chart-2))",
-                },
-              }}
-              className="h-[300px]"
-            >
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={userActivityData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="name" />
-                  <YAxis />
-                  <ChartTooltip content={<ChartTooltipContent />} />
-                  <Legend />
-                  <Line type="monotone" dataKey="logins" stroke="var(--color-logins)" name="Logins" strokeWidth={2} />
-                  <Line
-                    type="monotone"
-                    dataKey="signups"
-                    stroke="var(--color-signups)"
-                    name="Sign-ups"
-                    strokeWidth={2}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            </ChartContainer>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle>Symptom Checks</CardTitle>
-                <CardDescription>Number of symptom checks per day</CardDescription>
-              </div>
-              <Select defaultValue="7d">
-                <SelectTrigger className="w-[120px]">
-                  <SelectValue placeholder="Select Period" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="1d">Last 24 hours</SelectItem>
-                  <SelectItem value="7d">Last 7 days</SelectItem>
-                  <SelectItem value="30d">Last 30 days</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <ChartContainer
-              config={{
-                checks: {
-                  label: "Symptom Checks",
-                  color: "hsl(var(--chart-3))",
-                },
-              }}
-              className="h-[300px]"
-            >
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={symptomChecksData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="name" />
-                  <YAxis />
-                  <ChartTooltip content={<ChartTooltipContent />} />
-                  <Bar dataKey="checks" fill="var(--color-checks)" name="Checks" />
-                </BarChart>
-              </ResponsiveContainer>
-            </ChartContainer>
-          </CardContent>
-        </Card>
-      </div>
 
       {/* Additional analytics and data */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">

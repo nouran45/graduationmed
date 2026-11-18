@@ -1,6 +1,7 @@
 "use client"
 
 import { ChangeEvent, useMemo, useRef, useState } from "react"
+import { useRouter } from "next/navigation"
 import {
   AlertTriangle,
   CheckCircle2,
@@ -164,6 +165,7 @@ const hideConfidence = Boolean(
 }
 
 export function ImageUpload({ onUploadComplete }: ImageUploadProps) {
+  const router = useRouter()
   const [images, setImages] = useState<string[]>([])
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [dragging, setDragging] = useState(false)
@@ -489,7 +491,7 @@ export function ImageUpload({ onUploadComplete }: ImageUploadProps) {
                           "skinAnalysisResults",
                           JSON.stringify([analysis])
                         )
-                        window.location.href = "/symptom-checker/results"
+                        router.push("/symptom-checker/results")
                       }}
                     >
                       View Detailed Results

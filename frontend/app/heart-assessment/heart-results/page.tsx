@@ -121,11 +121,11 @@ export default function HeartResults() {
           <Card className="border-0 shadow-md">
             <CardContent className="p-6 text-center">
               <div className={`text-3xl font-bold mb-2 ${highRisk ? "text-red-600" : "text-green-600"}`}>
-                {results.probability_disease *100 .toFixed(1)}%
+                {(results.probability_disease * 100).toFixed(1)}%
               </div>
               <h3 className="text-lg font-semibold mb-1">Disease Probability</h3>
               <p className="text-gray-500 text-sm">
-                No disease: {results.probability_no_disease *100 .toFixed(1)}%
+                No disease: {(results.probability_no_disease * 100).toFixed(1)}%
               </p>
             </CardContent>
           </Card>
@@ -138,7 +138,7 @@ export default function HeartResults() {
               </div>
               <h3 className="text-lg font-semibold mb-1">
                 {results.confidence != null
-                  ? `${results.confidence *100 .toFixed(1)}%`
+                  ? `${Number(results.confidence).toFixed(1)}%`
                   : "N/A"}
               </h3>
               <p className="text-gray-600">Model Confidence</p>

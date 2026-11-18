@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 import Link from "next/link"
 import {
@@ -7,42 +7,48 @@ import {
     Droplets,
     HeartPulse,
     Pill,
-    Plus,
     Sparkles,
     Stethoscope,
     Thermometer,
+    Package,
 } from "lucide-react"
 
-const icons = {
-    HeartPulse,
-    Thermometer,
-    Pill,
-    Sparkles,
-    Droplets,
-    Baby,
-    Plus,
-    Stethoscope,
-}
+const icons = [
+    { match: ["baby", "milk", "infant"], icon: Baby },
+    { match: ["drop", "solution", "spray"], icon: Droplets },
+    { match: ["heart", "cardio"], icon: HeartPulse },
+    { match: ["cosmetic", "make up", "perfum", "beauty"], icon: Sparkles },
+    { match: ["tool", "device", "equipment"], icon: Stethoscope },
+    { match: ["temperature", "thermometer"], icon: Thermometer },
+    { match: ["tablet", "capsule", "medicine", "injection"], icon: Pill },
+]
 
 type CategoryCardProps = {
     name: string
     slug: string
-    description: string
-    icon: string
+    description?: string
+    icon?: string
+    productCount?: number
+    pharmacyCount?: number
 }
 
 export default function CategoryCard({
     name,
     slug,
     description,
-    icon,
+    productCount,
+    pharmacyCount,
 }: CategoryCardProps) {
+    const normalizedName = name.toLowerCase()
+
     const Icon =
-        icons[icon as keyof typeof icons] ?? Pill
+        icons.find((entry) =>
+            entry.match.some((word) => normalizedName.includes(word))
+        )?.icon ?? Package
 
     return (
         <Link
-            href={`/pharmacy?category=${slug}`}
+            href={`/pharmacy?category=${encodeURIComponent(slug)}`}
             className="group rounded-2xl border border-gray-100 bg-white p-5 transition-all duration-300 hover:-translate-y-1 hover:border-primary/20 hover:shadow-lg"
         >
             <div className="flex items-start justify-between">
@@ -57,9 +63,27 @@ export default function CategoryCard({
                 {name}
             </h3>
 
-            <p className="mt-1.5 text-xs leading-5 text-gray-400">
-                {description}
-            </p>
+            {description && (
+                <p className="mt-1.5 text-xs leading-5 text-gray-400">
+                    {description}
+                </p>
+            )}
+
+            {(typeof productCount === "number" ||
+                typeof pharmacyCount === "number") && (
+                <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-gray-400">
+                    {typeof productCount === "number" && (
+                        <span>
+                            {productCount.toLocaleString("en-EG")} products
+                        </span>
+                    )}
+                    {typeof pharmacyCount === "number" && (
+                        <span>
+                            {pharmacyCount.toLocaleString("en-EG")} pharmacies
+                        </span>
+                    )}
+                </div>
+            )}
         </Link>
     )
 }
