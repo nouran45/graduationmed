@@ -1,6 +1,6 @@
 from datetime import datetime
 from enum import Enum
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, EmailStr, Field
 
@@ -111,3 +111,12 @@ class VerificationAction(BaseModel):
     status: VerificationDecision
     reason: Optional[str] = Field(None, max_length=1000)
 
+
+
+class StaffGrant(BaseModel):
+    """Owner/admin gives an EXISTING MediCheck user access to the pharmacy."""
+    email: EmailStr
+    staff_role: Literal["owner", "pharmacist", "inventory"]
+    # None  = every branch of the pharmacy
+    # [..]  = only these branches
+    branch_ids: Optional[list[str]] = Field(default=None, max_length=100)

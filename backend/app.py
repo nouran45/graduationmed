@@ -1,247 +1,137 @@
-﻿from pymongo.mongo_client import MongoClient
-from pymongo.server_api import ServerApi
-from models import UserSignup, MedicalHistory, UserLogin, UserWithHistoryResponse, UserWithHistoryResponse
+import logging
+import os
+import tempfile
+import traceback
+from contextlib import asynccontextmanager
+from datetime import datetime, timezone
+from typing import Any, Dict, List
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, UploadFile, File, HTTPException, Depends, status, Request
+from fastapi import Depends, FastAPI, File, HTTPException, UploadFile, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from jose import JWTError, jwt
-from passlib.context import CryptContext
-from datetime import datetime, timedelta, timezone
-from typing import Optional, Dict, Any
 
-from fastapi import HTTPException, Depends
-from typing import List, Dict, Any
+load_dotenv()
 
-from fastapi import HTTPException, Depends
-from typing import List, Dict, Any
+# ── Database: ONE shared client (database.py) ───────────────────────────────
+from database import client, history_collection, users
 
-from routers.prescriptions import router as prescriptions_router
+# ── Security layer (Grad 2 / Phase 1) ───────────────────────────────────────
+from security.authorization import memberships_summary, require_admin
+from security.config import get_settings
+from security.identity import get_current_user
+from security import audit_events as audit
+from security.event_sink import get_sink
+from security.indexes import ensure_indexes
+from security.logging_middleware import SecurityLoggingMiddleware
+from security.request_context import add_detail
+from security.middleware import RequestContextMiddleware, unhandled_exception_handler
+from security.rate_limit import rate_limit
+from security.uploads import read_upload_limited, safe_display_filename, validate_image_bytes
+
+# ── Routers ─────────────────────────────────────────────────────────────────
+from routers.admin_users import router as admin_users_router
+from routers.auth import router as auth_router
+from routers.inventory import router as inventory_router
+from routers.pharmacies import router as pharmacies_router
 from routers.pharmacy_catalogue import router as pharmacy_catalogue_router
+from routers.prescriptions import router as prescriptions_router
+from routers.security_events import router as security_events_router
 
+# ── Models ──────────────────────────────────────────────────────────────────
+from models import (
+    AnemiaInput,
+    AnemiaResponse,
+    DiabetesInput,
+    HeartDiseaseInput,
+    HeartDiseaseResponse,
+    KidneyDiseaseInput,
+    MedicalHistory,
+)
 
-import os
-import logging
-import tempfile
-
-# â”€â”€ Skin disease predictors â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-# predict.py:              base ViT model  â†’ /predict  (clean images)
-# predict_skin_defense.py: Phase F pipeline â†’ /predict-skin-defense (any image)
+# ── Skin disease predictors ────────────────────────────────────────────────
+# predict.py:              base ViT model  → /predict  (clean images)
+# predict_skin_defense.py: Phase F pipeline → /predict-skin-defense (any image)
 from utils.predict import predict_skin_disease
 from utils.predict_skin_defense import predict_skin_defense, get_pipeline_status
-# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-
-import requests
-from typing import Optional
-import tempfile
-from fastapi import UploadFile, File, Depends, HTTPException
-from datetime import datetime, timezone
-from fastapi import FastAPI, Request
-from pydantic import BaseModel
-from fastapi import APIRouter, Depends, HTTPException, status
-from models import DiabetesInput
 from utils.predict_diabetes import predict_diabetes
-from models import KidneyDiseaseInput  
-from utils.predict_kidney import predict_kidney_disease  
+from utils.predict_kidney import predict_kidney_disease
 from utils.predict_fracture import predict_fracture
-from models import HeartDiseaseInput, HeartDiseaseResponse
 from utils.predict_heart import predict_heart_disease
-from models import DiabetesInput, AnemiaInput, AnemiaResponse
 from utils.predict_anemia import predict_anemia, generate_anemia_recommendations
-import traceback
 from utils.normalize import normalize_prediction_response
-
-
-from fastapi import HTTPException, Depends
-from typing import List, Dict, Any
-from bson import ObjectId
-from fastapi.middleware.cors import CORSMiddleware
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-load_dotenv()
+settings = get_settings()          # raises at start-up if SECRET_KEY is weak/missing
 
-app = FastAPI()
-
-
-
-SECRET_KEY = os.getenv("SECRET_KEY")
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 120
-
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
+INTERNAL_ERROR = "Internal server error."
 
 
-uri = os.getenv("MONGO_URI")
-client = MongoClient(uri, server_api=ServerApi('1'), serverSelectionTimeoutMS=5000)
-db = client["database"]
-users = db["users"]
-history_collection = db["history"]
-try:
-    client.admin.command('ping')
-    print("âœ… MongoDB Atlas connection established.")
-except Exception as e:
-    print(f"âŒ Failed to connect to MongoDB Atlas: {e}")
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    try:
+        client.admin.command("ping")
+        logger.info("MongoDB connection established.")
+    except Exception as exc:  # noqa: BLE001
+        logger.error("Failed to connect to MongoDB: %s", exc)
+    problems = ensure_indexes()
+    if problems:
+        logger.error(
+            "%d index(es) could not be created. Run scripts/migrate_phase1.py. %s",
+            len(problems), problems,
+        )
+    sink = get_sink()
+    sink.start()                      # security event writer (replays any spilled events first)
+    yield
+    sink.stop(timeout=5.0)            # flush queued events on shutdown
 
-# CORS Configuration
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "https://medical-symptom-checker-five.vercel.app"
-    ],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+
+app = FastAPI(
+    lifespan=lifespan,
+    docs_url="/docs" if settings.docs_enabled else None,
+    redoc_url=None,
+    openapi_url="/openapi.json" if settings.docs_enabled else None,
 )
 
-# Password and Token Functions
-def verify_password(plain_password: str, hashed_password: str):
-    return pwd_context.verify(plain_password, hashed_password)
-
-def get_password_hash(password: str):
-    return pwd_context.hash(password)
-
-def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
-    to_encode = data.copy()
-    if expires_delta:
-        expire = datetime.now(timezone.utc) + expires_delta
-    else:
-        expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    to_encode.update({"exp": expire})
-    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-
-async def get_current_user(token: str = Depends(oauth2_scheme)):
-    credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        email: str = payload.get("sub")
-        if email is None:
-            logger.error("Token payload missing 'sub' field")
-            raise credentials_exception
-    except JWTError as e:
-        logger.error(f"JWT decode error: {str(e)}")
-        raise credentials_exception
-    
-    user = users.find_one({"email": email})
-    if user is None:
-        logger.error(f"User not found in database: {email}")
-        raise credentials_exception
-    
-    logger.info(f"User authenticated: {email}")
-    return user
-
+# Middleware order: the LAST one added is the OUTERMOST.
+#   CORS  >  SecurityLoggingMiddleware  >  RequestContextMiddleware  >  routes
+# Logging sits OUTSIDE RequestContext so early rejections (413) are logged too;
+# CORS is outermost so even 413/429 responses carry CORS headers.
+app.add_middleware(RequestContextMiddleware)
+app.add_middleware(SecurityLoggingMiddleware)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_origins,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "X-Branch-ID"],
+    expose_headers=["X-Request-ID", "Retry-After"],
+)
+app.add_exception_handler(Exception, unhandled_exception_handler)
 
 # Routes
-
+app.include_router(auth_router)
 app.include_router(prescriptions_router)
-app.include_router(pharmacy_catalogue_router)
+app.include_router(pharmacies_router)   # now authenticated; safe to register
+app.include_router(inventory_router)    # now authenticated; safe to register
+app.include_router(security_events_router)   # admin-only READ access to security events (Phase 2)
+app.include_router(pharmacy_catalogue_router)  # public product catalogue (teammate); admin-only sync
+app.include_router(admin_users_router)          # admin: create users with a role, change roles
+
+_predict_limit = rate_limit("predict", "predict_per_minute", 60)
+_heavy_limit = rate_limit("predict_heavy", "heavy_predict_per_minute", 60)
+
 
 @app.get("/")
 def home():
     return {"message": "Skin Disease Detection API is running!"}
 
-@app.post("/register")
-async def register(user_data: UserSignup):
-
-
-    if users.find_one({"email": user_data.email}):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Email already registered"
-        )
-    
-    # Create user document
-    user_dict = user_data.dict()
-    user_dict["hashed_password"] = get_password_hash(user_data.password)
-    user_dict.pop("confirmPassword", None)
-    user_dict["created_at"] = datetime.now(timezone.utc)
-    user_dict["updated_at"] = datetime.now(timezone.utc)
-    user_dict["role"] = "patient" 
-
-
-    result = users.insert_one(user_dict)
-    return {
-        "message": "User registered successfully",
-        "user_id": str(result.inserted_id)
-    }
-
-@app.get("/verify-token")
-async def verify_token(current_user: dict = Depends(get_current_user)):
-    """Verify JWT token validity"""
-    logger.info(f"Token verified for user: {current_user['email']}")
-    return {
-        "valid": True,
-        "user": current_user["email"],
-        "userId": str(current_user["_id"])
-    }
-
-@app.post("/login")
-async def login(credentials: UserLogin):
-    """Login endpoint - returns access_token"""
-    logger.info(f"Login attempt for: {credentials.email}")
-    
-    user = users.find_one({"email": credentials.email})
-    if not user:
-        logger.warning(f"Login failed - user not found: {credentials.email}")
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect email or password",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    
-    if not verify_password(credentials.password, user["hashed_password"]):
-        logger.warning(f"Login failed - incorrect password: {credentials.email}")
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect email or password",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    
-    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    access_token = create_access_token(
-        data={"sub": user["email"]},
-        expires_delta=access_token_expires
-    )
-    
-    logger.info(f"Login successful for: {credentials.email}")
-    
-    return {
-        "access_token": access_token,
-        "token_type": "bearer",
-        "expires_in": ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-        "user": {
-            "id": str(user["_id"]),
-            "firstName": user.get("firstName", ""),
-            "lastName": user.get("lastName", ""),
-            "email": user["email"],
-            "role": user.get("role", "patient")
-        }
-    }
-
-@app.get("/users/me")
-async def read_users_me(current_user: Dict[str, Any] = Depends(get_current_user)):
-    return {
-        "id": str(current_user["_id"]),
-        "email": current_user["email"],
-        "firstName": current_user.get("firstName", ""),
-        "lastName": current_user.get("lastName", ""),
-        "role": current_user.get("role", "patient")
-    }
-
 
 # =============================================================================
-# /predict  â€” Base ViT skin disease endpoint (clean images)
+# /predict  — Base ViT skin disease endpoint (clean images)
 # =============================================================================
-@app.post("/predict")
+@app.post("/predict", dependencies=[Depends(_predict_limit)])
 async def predict(
     file: UploadFile = File(...),
     current_user: dict = Depends(get_current_user)
@@ -252,17 +142,13 @@ async def predict(
     """
     temp_path = None
     try:
-        file_ext = os.path.splitext(file.filename)[1].lower()
-        if file_ext not in {".jpg", ".jpeg", ".png"}:
-            raise HTTPException(
-                status_code=400,
-                detail="Invalid file format. Supported: .jpg, .jpeg, .png"
-            )
+        content = await read_upload_limited(file, settings.max_image_bytes)
+        kind = validate_image_bytes(content)          # magic bytes + Pillow header check
+        file_ext = ".jpg" if kind == "jpeg" else ".png"
 
-        logger.info(f"ðŸ”¬ Skin prediction (base ViT) from user: {current_user['email']}")
+        logger.info(f"🔬 Skin prediction (base ViT) from user: {current_user['_id']}")
 
         with tempfile.NamedTemporaryFile(delete=False, suffix=file_ext) as temp_file:
-            content = await file.read()
             temp_file.write(content)
             temp_path = temp_file.name
 
@@ -278,28 +164,28 @@ async def predict(
             "user_id": current_user["_id"],
             "prediction": result,
             "type": "skin_disease",
-            "filename": file.filename,
+            "filename": safe_display_filename(file.filename),
             "created_at": datetime.now(timezone.utc)
         }
         history_collection.insert_one(history_record)
-        logger.info(f"âœ… Base ViT prediction: {result.get('disease')} ({result.get('confidence', 0):.2%})")
+        logger.info(f"✅ Base ViT prediction: {result.get('disease')} ({result.get('confidence', 0):.2%})")
 
         return result
 
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"âŒ Skin prediction error: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Server error: {str(e)}")
+        logger.error(f"❌ Skin prediction error: {str(e)}")
+        raise HTTPException(status_code=500, detail=INTERNAL_ERROR)
     finally:
         if temp_path and os.path.exists(temp_path):
             os.unlink(temp_path)
 
 
 # =============================================================================
-# /predict-skin-defense  â€” Phase F complete adversarial defense pipeline
+# /predict-skin-defense  — Phase F complete adversarial defense pipeline
 # =============================================================================
-@app.post("/predict-skin-defense")
+@app.post("/predict-skin-defense", dependencies=[Depends(_heavy_limit)])
 async def predict_skin_defense_endpoint(
     file: UploadFile = File(...),
     current_user: dict = Depends(get_current_user)
@@ -311,7 +197,7 @@ async def predict_skin_defense_endpoint(
     or dense adversarial attack), routes it to the correct denoiser, then
     classifies the denoised image with the ViT.
 
-    Pipeline: DenseNet121 detector â†’ [skip | SUNet v1 sparse | SUNet v3] â†’ ViT
+    Pipeline: DenseNet121 detector → [skip | SUNet v1 sparse | SUNet v3] → ViT
 
     Response includes:
       - disease / diagnosis / confidence: classification result
@@ -322,18 +208,14 @@ async def predict_skin_defense_endpoint(
     """
     temp_path = None
     try:
-        file_ext = os.path.splitext(file.filename)[1].lower()
-        if file_ext not in {".jpg", ".jpeg", ".png"}:
-            raise HTTPException(
-                status_code=400,
-                detail="Invalid file format. Supported: .jpg, .jpeg, .png"
-            )
+        content = await read_upload_limited(file, settings.max_image_bytes)
+        kind = validate_image_bytes(content)          # magic bytes + Pillow header check
+        file_ext = ".jpg" if kind == "jpeg" else ".png"
 
-        logger.info(f"ðŸ›¡ï¸  Phase F defense request from user: {current_user['email']}")
-        logger.info(f"ðŸ“ File: {file.filename}")
+        logger.info(f"🛡️  Phase F defense request from user: {current_user['_id']}")
+        logger.info(f"📁 File: {file.filename}")
 
         with tempfile.NamedTemporaryFile(delete=False, suffix=file_ext) as temp_file:
-            content = await file.read()
             temp_file.write(content)
             temp_path = temp_file.name
 
@@ -365,18 +247,28 @@ async def predict_skin_defense_endpoint(
         result["hide_confidence"] = hide_confidence
         result["hideConfidence"] = hide_confidence
 
+        # Operational category of the Grad 1 defence pipeline: clean | sparse | dense.
+        # Recorded in the security event for context, but it is NOT a cybersecurity
+        # attack label (that comes from the scenario runner in Phase 3).
+        add_detail(
+            "model_route",
+            "sparse" if "sparse" in route_used or detector_class_int == 1
+            else "dense" if "sunet_v3" in route_used or "dense" in route_used or detector_class_int == 2
+            else "clean",
+        )
+
         history_record = {
             "user_id": current_user["_id"],
             "prediction": result,
             "type": "skin_disease",
-            "filename": file.filename,
+            "filename": safe_display_filename(file.filename),
             "pipeline": "phase_f",
             "created_at": datetime.now(timezone.utc)
         }
         history_collection.insert_one(history_record)
 
         logger.info(
-            f"âœ… Phase F prediction: {result.get('disease')} | "
+            f"✅ Phase F prediction: {result.get('disease')} | "
             f"route={result.get('route_used')} | "
             f"confidence={result.get('confidence', 0):.2%}"
         )
@@ -386,18 +278,18 @@ async def predict_skin_defense_endpoint(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"âŒ Phase F prediction error: {str(e)}\n{traceback.format_exc()}")
-        raise HTTPException(status_code=500, detail=f"Server error: {str(e)}")
+        logger.error(f"❌ Phase F prediction error: {str(e)}\n{traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=INTERNAL_ERROR)
     finally:
         if temp_path and os.path.exists(temp_path):
             os.unlink(temp_path)
 
 
 @app.get("/predict-skin-defense/health")
-async def skin_defense_health():
+async def skin_defense_health(_admin: dict = Depends(require_admin)):
     """
     Health check for the Phase F pipeline.
-    Does NOT load models â€” safe to call at any time.
+    Does NOT load models — safe to call at any time.
     Returns model file paths and whether models are currently loaded.
     """
     status_info = get_pipeline_status()
@@ -422,11 +314,16 @@ async def save_history(
         history_dict["user_id"] = current_user["_id"]
         history_dict["created_at"] = datetime.now(timezone.utc)
         history_collection.insert_one(history_dict)
+        audit.emit(
+            "history.write.allowed", outcome="success", resource_type="medical_history",
+            target_relation="self", authorization_result="allowed", rule_id=audit.RULE_HISTORY,
+        )
         return {"message": "History saved successfully"}
     except Exception as e:
+        logger.error("save-history failed: %s", e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
+            detail=INTERNAL_ERROR
         )
 
 @app.get("/history")
@@ -442,11 +339,17 @@ async def get_history(current_user: Dict[str, Any] = Depends(get_current_user)):
                 "created_at": h.get("created_at").isoformat() if h.get("created_at") else None
             }
             history_list.append(history_item)
+        audit.emit(
+            "history.read.allowed", outcome="success", resource_type="medical_history",
+            target_relation="self", authorization_result="allowed", rule_id=audit.RULE_HISTORY,
+            details={"record_count": len(history_list)},
+        )
         return history_list
     except Exception as e:
+        logger.error("history failed: %s", e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
+            detail=INTERNAL_ERROR
         )
 
 
@@ -575,15 +478,18 @@ async def get_dashboard_history(
             "recommendations": recommendations,
         })
 
+    audit.emit(
+        "history.read.allowed", outcome="success", resource_type="medical_history",
+        target_relation="self", authorization_result="allowed", rule_id=audit.RULE_HISTORY,
+        details={"record_count": len(formatted)},
+    )
     return formatted
 
 
 
 
 @app.get("/users")
-async def get_all_users(current_user: Dict[str, Any] = Depends(get_current_user)):
-    if current_user.get("role") != "admin":
-        raise HTTPException(status_code=403, detail="Not authorized")
+async def get_all_users(_admin: dict = Depends(require_admin)):
 
     all_users = users.find()
     user_list = []
@@ -606,16 +512,24 @@ async def get_all_users(current_user: Dict[str, Any] = Depends(get_current_user)
             "name": f"{user.get('firstName', '')} {user.get('lastName', '')}".strip(),
             "email": user.get("email", ""),
             "dateJoined": user.get("created_at").strftime("%b %d, %Y") if user.get("created_at") else "N/A",
+            # used by the admin role-management screen
+            "role": user.get("role", "patient"),
+            "isDisabled": bool(user.get("is_disabled", False)),
+            "memberships": memberships_summary(user["_id"]),
             "histories": formatted_histories
         })
+    audit.emit(
+        "admin.users.listed", outcome="success", resource_type="user_directory",
+        details={"record_count": len(user_list)},
+    )
     return user_list
 
-@app.post("/predict-diabetes")
+@app.post("/predict-diabetes", dependencies=[Depends(_predict_limit)])
 async def predict_diabetes_endpoint(
     data: DiabetesInput, 
     current_user: dict = Depends(get_current_user)
 ):
-    print("ðŸ” Diabetes prediction request received")
+    print("🔍 Diabetes prediction request received")
     
     try:
         input_data = data.dict()
@@ -642,16 +556,16 @@ async def predict_diabetes_endpoint(
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Server error: {str(e)}"
+            detail=INTERNAL_ERROR
         )
     
-@app.post("/predict-kidney")
+@app.post("/predict-kidney", dependencies=[Depends(_predict_limit)])
 async def predict_kidney_endpoint(
     data: KidneyDiseaseInput, 
     current_user: dict = Depends(get_current_user)
 ):
     """Predict chronic kidney disease based on patient data"""
-    logger.info("ðŸ” Kidney disease prediction request received")
+    logger.info("🔍 Kidney disease prediction request received")
     
     try:
         input_data = data.dict()
@@ -680,10 +594,10 @@ async def predict_kidney_endpoint(
         logger.error(f"Kidney prediction error: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Server error: {str(e)}"
+            detail=INTERNAL_ERROR
         )
     
-@app.post("/predict-fracture")
+@app.post("/predict-fracture", dependencies=[Depends(_predict_limit)])
 async def predict_fracture_endpoint(
     file: UploadFile = File(...),
     current_user: dict = Depends(get_current_user)
@@ -692,25 +606,20 @@ async def predict_fracture_endpoint(
     Predict fracture from X-ray image
     Accepts: .jpg, .jpeg, .png, .JPG, .JPEG, .PNG
     """
+    temp_path = None
     try:
-        valid_extensions = ['.jpg', '.jpeg', '.png', '.JPG', '.JPEG', '.PNG']
-        file_ext = os.path.splitext(file.filename)[1]
-        
-        if file_ext not in valid_extensions:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Invalid file format. Supported formats: {', '.join(valid_extensions)}"
-            )
-        
-        logger.info(f"ðŸ©» Fracture detection request from user: {current_user['email']}")
-        logger.info(f"ðŸ“ File: {file.filename}, Type: {file.content_type}")
+        content = await read_upload_limited(file, settings.max_image_bytes)
+        kind = validate_image_bytes(content)
+        file_ext = ".jpg" if kind == "jpeg" else ".png"
+
+        logger.info(f"🩻 Fracture detection request from user: {current_user['_id']}")
+        logger.info(f"📁 File: {file.filename}, Type: {file.content_type}")
         
         with tempfile.NamedTemporaryFile(delete=False, suffix=file_ext) as temp_file:
-            content = await file.read()
             temp_file.write(content)
             temp_path = temp_file.name
         
-        logger.info(f"ðŸ’¾ Saved temp file: {temp_path}")
+        logger.info(f"💾 Saved temp file: {temp_path}")
         
         result = predict_fracture(temp_path)
         
@@ -725,7 +634,7 @@ async def predict_fracture_endpoint(
         conf_value = float(result.get("confidence", 0))
         conf_percent = conf_value * 100 if 0 <= conf_value <= 1 else conf_value
         logger.info(
-            f"âœ… Prediction successful: {result.get('diagnosis', 'Unknown')} "
+            f"✅ Prediction successful: {result.get('diagnosis', 'Unknown')} "
             f"(confidence: {conf_percent:.1f}%)"
         )
         
@@ -733,35 +642,35 @@ async def predict_fracture_endpoint(
             "user_id": current_user["_id"],
             "prediction": result,
             "type": "fracture",
-            "filename": file.filename,
+            "filename": safe_display_filename(file.filename),
             "created_at": datetime.now(timezone.utc)
         }
         history_collection.insert_one(history_record)
-        logger.info("ðŸ’¾ Saved to history")
+        logger.info("💾 Saved to history")
         
         return result
         
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"âŒ Fracture prediction error: {str(e)}")
+        logger.error(f"❌ Fracture prediction error: {str(e)}")
         raise HTTPException(
             status_code=500,
-            detail=f"Server error: {str(e)}"
+            detail=INTERNAL_ERROR
         )
     finally:
-        if 'temp_path' in locals() and os.path.exists(temp_path):
+        if temp_path and os.path.exists(temp_path):
             os.unlink(temp_path)
-            logger.info(f"ðŸ—‘ï¸ Cleaned up temp file")
+            logger.info(f"🗑️ Cleaned up temp file")
 
 
 
-@app.post("/predict-heart", response_model=HeartDiseaseResponse)
+@app.post("/predict-heart", response_model=HeartDiseaseResponse, dependencies=[Depends(_predict_limit)])
 async def predict_heart_endpoint(
     data: HeartDiseaseInput,
     current_user: dict = Depends(get_current_user)
 ):
-    logger.info("â¤ï¸ Heart disease prediction request received")
+    logger.info("❤️ Heart disease prediction request received")
  
     try:
         input_data = data.dict()
@@ -774,7 +683,7 @@ async def predict_heart_endpoint(
             )
  
         logger.info(
-            f"âœ… Prediction: {result['disease']} "
+            f"✅ Prediction: {result['disease']} "
             f"(confidence: {result['confidence']}% | "
             f"threshold: {result.get('threshold_used', 'N/A')})"
         )
@@ -791,27 +700,27 @@ async def predict_heart_endpoint(
             "created_at": datetime.now(timezone.utc)
         }
         history_collection.insert_one(history_record)
-        logger.info("ðŸ’¾ Saved to history")
+        logger.info("💾 Saved to history")
  
         return result
  
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"âŒ Heart disease prediction error: {str(e)}\n{traceback.format_exc()}")
+        logger.error(f"❌ Heart disease prediction error: {str(e)}\n{traceback.format_exc()}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Server error: {str(e)}"
+            detail=INTERNAL_ERROR
         )
     
 
-@app.post("/predict-anemia")
+@app.post("/predict-anemia", dependencies=[Depends(_predict_limit)])
 async def predict_anemia_endpoint(
     data: AnemiaInput, 
     current_user: dict = Depends(get_current_user)
 ) -> AnemiaResponse:
     """Predict anemia based on blood work parameters"""
-    logger.info("ðŸ©¸ Anemia prediction request received")
+    logger.info("🩸 Anemia prediction request received")
     
     try:
         input_data = data.dict()
@@ -820,7 +729,7 @@ async def predict_anemia_endpoint(
         if not result.get("success", False):
             raise HTTPException(status_code=400, detail=result.get("error", "Anemia prediction failed"))
         
-        logger.info(f"âœ… Prediction successful: {result['disease']}")
+        logger.info(f"✅ Prediction successful: {result['disease']}")
         
         recommendations = generate_anemia_recommendations(result['has_anemia'], input_data)
         result['recommendations'] = recommendations
@@ -838,5 +747,5 @@ async def predict_anemia_endpoint(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"âŒ Anemia prediction error: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Server error: {str(e)}")
+        logger.error(f"❌ Anemia prediction error: {str(e)}")
+        raise HTTPException(status_code=500, detail=INTERNAL_ERROR)

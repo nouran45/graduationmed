@@ -1,5 +1,7 @@
 "use client";
 
+import { logout } from "@/lib/auth-client";
+
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useRouter } from "next/navigation";
@@ -152,10 +154,8 @@ export default function MedicalHistoryPage() {
     setExpandedRecord((cur) => (cur === id ? null : id));
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem("isLoggedIn");
-    localStorage.removeItem("user");
-    localStorage.removeItem("authToken");
+  const handleLogout = async () => {
+    await logout(null);            // also revokes the token (the old code left access_token behind)
     router.push("/");
   };
 

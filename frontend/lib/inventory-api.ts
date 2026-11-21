@@ -1,7 +1,11 @@
-const API_BASE = (
-    process.env.NEXT_PUBLIC_API_BASE_URL ||
-    "http://127.0.0.1:8000"
-).replace(/\/$/, "")
+import {
+    API_BASE,
+    AUTO_BRANCH,
+    authFetch,
+    branchHeader,
+} from "@/lib/auth-client"
+
+export { AUTO_BRANCH }
 
 
 // =========================================================
@@ -38,7 +42,14 @@ export interface InventoryDetailsUpdate {
 
 
 export interface InventoryApiContext {
-    branchId: string
+    /**
+     * Optional branch SELECTOR. Use AUTO_BRANCH (or omit) so the server picks
+     * the staff member's only branch. The server rejects any branch the
+     * signed-in user does not work at.
+     */
+    branchId?: string
+
+    /** @deprecated ignored. The actor is the signed-in user, decided by the server. */
     actorId?: string
 }
 
@@ -149,24 +160,14 @@ export interface InventoryDashboardResponse {
 
 function buildHeaders(
     context: InventoryApiContext,
-    includeActor = false
+    _includeActor = false
 ): HeadersInit {
-    const headers: Record<string, string> = {
+    // Authorization is added by authFetch. X-Actor-ID is NOT sent any more:
+    // the backend takes the actor from the verified session.
+    return {
         "Content-Type": "application/json",
-        "X-Branch-ID": context.branchId,
+        ...branchHeader(context.branchId),
     }
-
-    if (includeActor) {
-        if (!context.actorId) {
-            throw new Error(
-                "Actor ID is required for this inventory action."
-            )
-        }
-
-        headers["X-Actor-ID"] = context.actorId
-    }
-
-    return headers
 }
 
 
@@ -205,7 +206,7 @@ export async function getInventory(
     context: InventoryApiContext,
     signal?: AbortSignal
 ): Promise<InventoryItem[]> {
-    const response = await fetch(
+    const response = await authFetch(
         `${API_BASE}/api/inventory`,
         {
             method: "GET",
@@ -225,7 +226,7 @@ export async function getInventoryItem(
     context: InventoryApiContext,
     signal?: AbortSignal
 ): Promise<InventoryItem> {
-    const response = await fetch(
+    const response = await authFetch(
         `${API_BASE}/api/inventory/${inventoryId}`,
         {
             method: "GET",
@@ -249,7 +250,7 @@ export async function updateInventoryQuantity(
     data: InventoryQuantityUpdate,
     context: InventoryApiContext
 ): Promise<InventoryItem> {
-    const response = await fetch(
+    const response = await authFetch(
         `${API_BASE}/api/inventory/${inventoryId}/quantity`,
         {
             method: "PATCH",
@@ -272,7 +273,7 @@ export async function updateInventoryDetails(
     data: InventoryDetailsUpdate,
     context: InventoryApiContext
 ): Promise<InventoryItem> {
-    const response = await fetch(
+    const response = await authFetch(
         `${API_BASE}/api/inventory/${inventoryId}/details`,
         {
             method: "PATCH",
@@ -295,7 +296,7 @@ export async function addManualStock(
     row: InventoryIntakeRow,
     context: InventoryApiContext
 ): Promise<InventoryItem> {
-    const response = await fetch(
+    const response = await authFetch(
         `${API_BASE}/api/inventory/intake/manual`,
         {
             method: "POST",
@@ -321,7 +322,7 @@ export async function validateInventoryCsv(
     csvText: string,
     context: InventoryApiContext
 ): Promise<InventoryIntakeValidationResponse> {
-    const response = await fetch(
+    const response = await authFetch(
         `${API_BASE}/api/inventory/intake/validate-csv`,
         {
             method: "POST",
@@ -346,7 +347,7 @@ export async function importInventoryRows(
     rows: InventoryIntakeRow[],
     context: InventoryApiContext
 ): Promise<InventoryImportResult> {
-    const response = await fetch(
+    const response = await authFetch(
         `${API_BASE}/api/inventory/intake/import`,
         {
             method: "POST",
@@ -374,7 +375,7 @@ export async function getInventoryDashboard(
     context: InventoryApiContext,
     signal?: AbortSignal
 ): Promise<InventoryDashboardResponse> {
-    const response = await fetch(
+    const response = await authFetch(
         `${API_BASE}/api/inventory/dashboard`,
         {
             method: "GET",

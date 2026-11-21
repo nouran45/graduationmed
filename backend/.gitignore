@@ -1,0 +1,5 @@
+private_uploads/
+.env
+__pycache__/
+.pytest_cache/
+security_spill/

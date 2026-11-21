@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
+import { AUTO_BRANCH } from "@/lib/inventory-api"
 import Link from "next/link"
 import {
     Activity,
@@ -39,8 +40,9 @@ import {
 } from "@/components/ui/table"
 
 
-const DEV_BRANCH_ID =
-    process.env.NEXT_PUBLIC_P4_BRANCH_ID || ""
+// Branch and actor are decided by the SERVER from the signed-in session.
+// "auto" = use my branch (server rejects branches I do not work at).
+const DEV_BRANCH_ID = AUTO_BRANCH
 
 
 // =========================================================

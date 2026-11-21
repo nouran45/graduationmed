@@ -1,0 +1,5289 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "FastAPI",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/register": {
+      "post": {
+        "tags": [
+          "Authentication"
+        ],
+        "summary": "Register",
+        "operationId": "register_register_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserSignup"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/login": {
+      "post": {
+        "tags": [
+          "Authentication"
+        ],
+        "summary": "Login",
+        "operationId": "login_login_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserLogin"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/verify-token": {
+      "get": {
+        "tags": [
+          "Authentication"
+        ],
+        "summary": "Verify Token",
+        "description": "Valid only if the JWT is genuine AND its server-side session is alive.",
+        "operationId": "verify_token_verify_token_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/users/me": {
+      "get": {
+        "tags": [
+          "Authentication"
+        ],
+        "summary": "Read Users Me",
+        "operationId": "read_users_me_users_me_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/logout": {
+      "post": {
+        "tags": [
+          "Authentication"
+        ],
+        "summary": "Logout",
+        "operationId": "logout_logout_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/logout-all": {
+      "post": {
+        "tags": [
+          "Authentication"
+        ],
+        "summary": "Logout All",
+        "operationId": "logout_all_logout_all_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/auth/change-password": {
+      "post": {
+        "tags": [
+          "Authentication"
+        ],
+        "summary": "Change Password",
+        "operationId": "change_password_auth_change_password_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangePasswordRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/prescriptions": {
+      "post": {
+        "tags": [
+          "Prescriptions"
+        ],
+        "summary": "Upload Prescription",
+        "operationId": "upload_prescription_api_prescriptions_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_prescription_api_prescriptions_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrescriptionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/prescriptions/pharmacy/queue": {
+      "get": {
+        "tags": [
+          "Prescriptions"
+        ],
+        "summary": "Pharmacy Prescription Queue",
+        "operationId": "pharmacy_prescription_queue_api_prescriptions_pharmacy_queue_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-Branch-ID",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Branch-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PrescriptionResponse"
+                  },
+                  "title": "Response Pharmacy Prescription Queue Api Prescriptions Pharmacy Queue Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/prescriptions/{prescription_id}/review": {
+      "post": {
+        "tags": [
+          "Prescriptions"
+        ],
+        "summary": "Submit Prescription Review",
+        "operationId": "submit_prescription_review_api_prescriptions__prescription_id__review_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "prescription_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Prescription Id"
+            }
+          },
+          {
+            "name": "X-Branch-ID",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Branch-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PrescriptionReviewRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrescriptionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/prescriptions/pharmacy/{prescription_id}": {
+      "get": {
+        "tags": [
+          "Prescriptions"
+        ],
+        "summary": "Pharmacy Prescription Detail",
+        "operationId": "pharmacy_prescription_detail_api_prescriptions_pharmacy__prescription_id__get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "prescription_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Prescription Id"
+            }
+          },
+          {
+            "name": "X-Branch-ID",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Branch-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrescriptionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/prescriptions/{prescription_id}": {
+      "get": {
+        "tags": [
+          "Prescriptions"
+        ],
+        "summary": "Read Prescription",
+        "operationId": "read_prescription_api_prescriptions__prescription_id__get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "prescription_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Prescription Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrescriptionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pharmacies": {
+      "post": {
+        "tags": [
+          "Pharmacy Network"
+        ],
+        "summary": "Create Pharmacy Endpoint",
+        "operationId": "create_pharmacy_endpoint_api_pharmacies_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PharmacyCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/pharmacies/{pharmacy_id}": {
+      "get": {
+        "tags": [
+          "Pharmacy Network"
+        ],
+        "summary": "Get Pharmacy Endpoint",
+        "operationId": "get_pharmacy_endpoint_api_pharmacies__pharmacy_id__get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "pharmacy_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Pharmacy Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "Pharmacy Network"
+        ],
+        "summary": "Update Pharmacy Endpoint",
+        "operationId": "update_pharmacy_endpoint_api_pharmacies__pharmacy_id__patch",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "pharmacy_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Pharmacy Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PharmacyUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pharmacies/{pharmacy_id}/branches": {
+      "post": {
+        "tags": [
+          "Pharmacy Network"
+        ],
+        "summary": "Create Branch Endpoint",
+        "description": "The pharmacy_id in the URL is authoritative (and must be owned by the caller).",
+        "operationId": "create_branch_endpoint_api_pharmacies__pharmacy_id__branches_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "pharmacy_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Pharmacy Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BranchCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Pharmacy Network"
+        ],
+        "summary": "Get Pharmacy Branches Endpoint",
+        "operationId": "get_pharmacy_branches_endpoint_api_pharmacies__pharmacy_id__branches_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "pharmacy_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Pharmacy Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/branches/public": {
+      "get": {
+        "tags": [
+          "Pharmacy Network"
+        ],
+        "summary": "Get Public Branches Endpoint",
+        "description": "Intentionally unauthenticated: patient-facing discovery of approved, online branches.",
+        "operationId": "get_public_branches_endpoint_api_branches_public_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/branches/{branch_id}": {
+      "get": {
+        "tags": [
+          "Pharmacy Network"
+        ],
+        "summary": "Get Branch Endpoint",
+        "operationId": "get_branch_endpoint_api_branches__branch_id__get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "branch_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Branch Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "Pharmacy Network"
+        ],
+        "summary": "Update Branch Endpoint",
+        "operationId": "update_branch_endpoint_api_branches__branch_id__patch",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "branch_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Branch Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BranchUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pharmacies/{pharmacy_id}/verification": {
+      "post": {
+        "tags": [
+          "Pharmacy Network"
+        ],
+        "summary": "Submit Verification Endpoint",
+        "operationId": "submit_verification_endpoint_api_pharmacies__pharmacy_id__verification_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "pharmacy_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Pharmacy Id"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/pharmacies/pending": {
+      "get": {
+        "tags": [
+          "Pharmacy Network"
+        ],
+        "summary": "Pending Verifications Endpoint",
+        "operationId": "pending_verifications_endpoint_api_admin_pharmacies_pending_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/admin/pharmacies/{pharmacy_id}/verification": {
+      "post": {
+        "tags": [
+          "Pharmacy Network"
+        ],
+        "summary": "Review Verification Endpoint",
+        "operationId": "review_verification_endpoint_api_admin_pharmacies__pharmacy_id__verification_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "pharmacy_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Pharmacy Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VerificationAction"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pharmacies/{pharmacy_id}/staff": {
+      "get": {
+        "tags": [
+          "Pharmacy Network"
+        ],
+        "summary": "List Staff Endpoint",
+        "operationId": "list_staff_endpoint_api_pharmacies__pharmacy_id__staff_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "pharmacy_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Pharmacy Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Pharmacy Network"
+        ],
+        "summary": "Grant Staff Endpoint",
+        "operationId": "grant_staff_endpoint_api_pharmacies__pharmacy_id__staff_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "pharmacy_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Pharmacy Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StaffGrant"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pharmacies/{pharmacy_id}/staff/{staff_user_id}": {
+      "delete": {
+        "tags": [
+          "Pharmacy Network"
+        ],
+        "summary": "Revoke Staff Endpoint",
+        "operationId": "revoke_staff_endpoint_api_pharmacies__pharmacy_id__staff__staff_user_id__delete",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "pharmacy_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Pharmacy Id"
+            }
+          },
+          {
+            "name": "staff_user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Staff User Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/branches": {
+      "get": {
+        "tags": [
+          "Pharmacy Network"
+        ],
+        "summary": "My Branches Endpoint",
+        "operationId": "my_branches_endpoint_api_me_branches_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/inventory": {
+      "post": {
+        "tags": [
+          "Inventory"
+        ],
+        "summary": "Create Inventory",
+        "operationId": "create_inventory_api_inventory_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-Branch-ID",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Branch-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InventoryCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InventoryResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Inventory"
+        ],
+        "summary": "Get Inventory",
+        "operationId": "get_inventory_api_inventory_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-Branch-ID",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Branch-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/InventoryResponse"
+                  },
+                  "title": "Response Get Inventory Api Inventory Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/inventory/dashboard": {
+      "get": {
+        "tags": [
+          "Inventory"
+        ],
+        "summary": "Inventory Dashboard",
+        "description": "Return inventory dashboard data for the caller's branch.",
+        "operationId": "inventory_dashboard_api_inventory_dashboard_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-Branch-ID",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Branch-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InventoryDashboardResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/inventory/intake/manual": {
+      "post": {
+        "tags": [
+          "Inventory"
+        ],
+        "summary": "Manual Stock Intake",
+        "description": "Manually add stock to one product.",
+        "operationId": "manual_stock_intake_api_inventory_intake_manual_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-Branch-ID",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Branch-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InventoryIntakeRow"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InventoryResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/inventory/intake/validate-csv": {
+      "post": {
+        "tags": [
+          "Inventory"
+        ],
+        "summary": "Validate Csv Intake",
+        "description": "Validate CSV inventory intake data.\n\nValidation only: nothing is written to MongoDB.\n(Requires write permission because it is the first step of a write flow\nand it parses attacker-sized text.)",
+        "operationId": "validate_csv_intake_api_inventory_intake_validate_csv_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-Branch-ID",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Branch-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InventoryCsvValidationRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InventoryIntakeValidationResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/inventory/intake/import": {
+      "post": {
+        "tags": [
+          "Inventory"
+        ],
+        "summary": "Confirm Inventory Import",
+        "description": "Import rows only after the frontend has shown\nvalidation results and the pharmacy confirms.",
+        "operationId": "confirm_inventory_import_api_inventory_intake_import_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-Branch-ID",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Branch-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InventoryImportRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InventoryImportResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/inventory/{inventory_id}": {
+      "get": {
+        "tags": [
+          "Inventory"
+        ],
+        "summary": "Get Inventory By Id",
+        "operationId": "get_inventory_by_id_api_inventory__inventory_id__get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "inventory_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Inventory Id"
+            }
+          },
+          {
+            "name": "X-Branch-ID",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Branch-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InventoryResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/inventory/{inventory_id}/quantity": {
+      "patch": {
+        "tags": [
+          "Inventory"
+        ],
+        "summary": "Change Inventory Quantity",
+        "operationId": "change_inventory_quantity_api_inventory__inventory_id__quantity_patch",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "inventory_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Inventory Id"
+            }
+          },
+          {
+            "name": "X-Branch-ID",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Branch-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InventoryQuantityUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InventoryResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/inventory/{inventory_id}/details": {
+      "patch": {
+        "tags": [
+          "Inventory"
+        ],
+        "summary": "Change Inventory Details",
+        "operationId": "change_inventory_details_api_inventory__inventory_id__details_patch",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "inventory_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Inventory Id"
+            }
+          },
+          {
+            "name": "X-Branch-ID",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Branch-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InventoryDetailsUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InventoryResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/inventory/{inventory_id}/movements": {
+      "get": {
+        "tags": [
+          "Inventory"
+        ],
+        "summary": "Get Inventory Movements",
+        "operationId": "get_inventory_movements_api_inventory__inventory_id__movements_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "inventory_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Inventory Id"
+            }
+          },
+          {
+            "name": "X-Branch-ID",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Branch-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/StockMovementResponse"
+                  },
+                  "title": "Response Get Inventory Movements Api Inventory  Inventory Id  Movements Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/security/events": {
+      "get": {
+        "tags": [
+          "Security events (admin)"
+        ],
+        "summary": "List Events",
+        "operationId": "list_events_api_security_events_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "request_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 64
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Request Id"
+            }
+          },
+          {
+            "name": "event_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 64
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Event Type"
+            }
+          },
+          {
+            "name": "actor_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 64
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Actor Id"
+            }
+          },
+          {
+            "name": "session_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 64
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Session Id"
+            }
+          },
+          {
+            "name": "source",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^(middleware|audit)$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Source"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/security/events/stats": {
+      "get": {
+        "tags": [
+          "Security events (admin)"
+        ],
+        "summary": "Event Stats",
+        "operationId": "event_stats_api_security_events_stats_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/catalogue/products": {
+      "get": {
+        "tags": [
+          "Pharmacy Catalogue"
+        ],
+        "summary": "Catalogue Products",
+        "operationId": "catalogue_products_api_catalogue_products_get",
+        "parameters": [
+          {
+            "name": "pharmacy_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 64
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Pharmacy Id"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 100
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "name": "category_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 2000000000,
+                  "minimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Category Id"
+            }
+          },
+          {
+            "name": "category_key",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 100
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Category Key"
+            }
+          },
+          {
+            "name": "availability",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 16
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Availability"
+            }
+          },
+          {
+            "name": "discounted_only",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Discounted Only"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 24,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 1000000,
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/catalogue/categories": {
+      "get": {
+        "tags": [
+          "Pharmacy Catalogue"
+        ],
+        "summary": "Catalogue Categories",
+        "operationId": "catalogue_categories_api_catalogue_categories_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/catalogue/products/{listing_id}/offers": {
+      "get": {
+        "tags": [
+          "Pharmacy Catalogue"
+        ],
+        "summary": "Catalogue Product Offers",
+        "operationId": "catalogue_product_offers_api_catalogue_products__listing_id__offers_get",
+        "parameters": [
+          {
+            "name": "listing_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 64,
+              "title": "Listing Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/catalogue/products/{listing_id}": {
+      "get": {
+        "tags": [
+          "Pharmacy Catalogue"
+        ],
+        "summary": "Catalogue Product",
+        "operationId": "catalogue_product_api_catalogue_products__listing_id__get",
+        "parameters": [
+          {
+            "name": "listing_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 64,
+              "title": "Listing Id"
+            }
+          },
+          {
+            "name": "pharmacy_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 64
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Pharmacy Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/catalogue/admin/sync/start": {
+      "post": {
+        "tags": [
+          "Pharmacy Catalogue"
+        ],
+        "summary": "Start Sync",
+        "operationId": "start_sync_api_catalogue_admin_sync_start_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "x-catalogue-sync-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Catalogue-Sync-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/catalogue/admin/sync/status": {
+      "get": {
+        "tags": [
+          "Pharmacy Catalogue"
+        ],
+        "summary": "Sync Status",
+        "operationId": "sync_status_api_catalogue_admin_sync_status_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "x-catalogue-sync-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Catalogue-Sync-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/pharmacies": {
+      "get": {
+        "tags": [
+          "Admin: users & roles"
+        ],
+        "summary": "List Pharmacies With Branches",
+        "operationId": "list_pharmacies_with_branches_api_admin_pharmacies_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/admin/users": {
+      "post": {
+        "tags": [
+          "Admin: users & roles"
+        ],
+        "summary": "Create User With Role",
+        "operationId": "create_user_with_role_api_admin_users_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminUserCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/admin/users/{user_id}/role": {
+      "patch": {
+        "tags": [
+          "Admin: users & roles"
+        ],
+        "summary": "Change Platform Role",
+        "operationId": "change_platform_role_api_admin_users__user_id__role_patch",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 64,
+              "title": "User Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RoleChange"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/": {
+      "get": {
+        "summary": "Home",
+        "operationId": "home__get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/predict": {
+      "post": {
+        "summary": "Predict",
+        "description": "Predict skin disease from a clean image using the base ViT model.\nUse /predict-skin-defense for images that may have been adversarially attacked.",
+        "operationId": "predict_predict_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_predict_predict_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/predict-skin-defense": {
+      "post": {
+        "summary": "Predict Skin Defense Endpoint",
+        "description": "Full Phase F adversarial defense pipeline.\n\nAutomatically detects whether the image has been attacked (clean, sparse,\nor dense adversarial attack), routes it to the correct denoiser, then\nclassifies the denoised image with the ViT.\n\nPipeline: DenseNet121 detector \u2192 [skip | SUNet v1 sparse | SUNet v3] \u2192 ViT\n\nResponse includes:\n  - disease / diagnosis / confidence: classification result\n  - route_used: which denoiser was applied\n  - detector_class: 0=Clean, 1=Sparse, 2=Dense\n  - detector_confidence: DenseNet121 routing confidence\n  - pipeline_version: phase_f_v1",
+        "operationId": "predict_skin_defense_endpoint_predict_skin_defense_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_predict_skin_defense_endpoint_predict_skin_defense_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/predict-skin-defense/health": {
+      "get": {
+        "summary": "Skin Defense Health",
+        "description": "Health check for the Phase F pipeline.\nDoes NOT load models \u2014 safe to call at any time.\nReturns model file paths and whether models are currently loaded.",
+        "operationId": "skin_defense_health_predict_skin_defense_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/save-history": {
+      "post": {
+        "summary": "Save History",
+        "operationId": "save_history_save_history_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MedicalHistory"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/history": {
+      "get": {
+        "summary": "Get History",
+        "operationId": "get_history_history_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/dashboard-history": {
+      "get": {
+        "summary": "Get Dashboard History",
+        "operationId": "get_dashboard_history_dashboard_history_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "type": "object"
+                  },
+                  "type": "array",
+                  "title": "Response Get Dashboard History Dashboard History Get"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/users": {
+      "get": {
+        "summary": "Get All Users",
+        "operationId": "get_all_users_users_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/predict-diabetes": {
+      "post": {
+        "summary": "Predict Diabetes Endpoint",
+        "operationId": "predict_diabetes_endpoint_predict_diabetes_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DiabetesInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/predict-kidney": {
+      "post": {
+        "summary": "Predict Kidney Endpoint",
+        "description": "Predict chronic kidney disease based on patient data",
+        "operationId": "predict_kidney_endpoint_predict_kidney_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KidneyDiseaseInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/predict-fracture": {
+      "post": {
+        "summary": "Predict Fracture Endpoint",
+        "description": "Predict fracture from X-ray image\nAccepts: .jpg, .jpeg, .png, .JPG, .JPEG, .PNG",
+        "operationId": "predict_fracture_endpoint_predict_fracture_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_predict_fracture_endpoint_predict_fracture_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/predict-heart": {
+      "post": {
+        "summary": "Predict Heart Endpoint",
+        "operationId": "predict_heart_endpoint_predict_heart_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HeartDiseaseInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HeartDiseaseResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/predict-anemia": {
+      "post": {
+        "summary": "Predict Anemia Endpoint",
+        "description": "Predict anemia based on blood work parameters",
+        "operationId": "predict_anemia_endpoint_predict_anemia_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnemiaInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnemiaResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AdminUserCreate": {
+        "properties": {
+          "firstName": {
+            "type": "string",
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Firstname"
+          },
+          "lastName": {
+            "type": "string",
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Lastname"
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "title": "Email"
+          },
+          "password": {
+            "type": "string",
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Password"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "patient",
+              "admin"
+            ],
+            "title": "Role",
+            "default": "patient"
+          },
+          "staff": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StaffAssignment"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "firstName",
+          "lastName",
+          "email",
+          "password"
+        ],
+        "title": "AdminUserCreate"
+      },
+      "AnemiaInput": {
+        "properties": {
+          "gender": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Gender",
+            "description": "Gender (0=female, 1=male or 'male'/'female')"
+          },
+          "hemoglobin": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Hemoglobin",
+            "description": "Hemoglobin level (g/dL)"
+          },
+          "mch": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Mch",
+            "description": "Mean Corpuscular Hemoglobin (pg)"
+          },
+          "mchc": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Mchc",
+            "description": "Mean Corpuscular Hemoglobin Concentration (g/dL)"
+          },
+          "mcv": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Mcv",
+            "description": "Mean Corpuscular Volume (fL)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "gender",
+          "hemoglobin",
+          "mch",
+          "mchc",
+          "mcv"
+        ],
+        "title": "AnemiaInput",
+        "description": "Input model for anemia prediction",
+        "example": {
+          "gender": "male",
+          "hemoglobin": 14.5,
+          "mch": 29.0,
+          "mchc": 33.5,
+          "mcv": 86.0
+        }
+      },
+      "AnemiaResponse": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success"
+          },
+          "prediction": {
+            "type": "integer",
+            "title": "Prediction"
+          },
+          "has_anemia": {
+            "type": "boolean",
+            "title": "Has Anemia"
+          },
+          "confidence": {
+            "type": "number",
+            "title": "Confidence"
+          },
+          "probability_no_anemia": {
+            "type": "number",
+            "title": "Probability No Anemia"
+          },
+          "probability_anemia": {
+            "type": "number",
+            "title": "Probability Anemia"
+          },
+          "risk_level": {
+            "type": "string",
+            "title": "Risk Level"
+          },
+          "disease": {
+            "type": "string",
+            "title": "Disease"
+          },
+          "diagnosis": {
+            "type": "string",
+            "title": "Diagnosis"
+          },
+          "notes": {
+            "type": "string",
+            "title": "Notes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "success",
+          "prediction",
+          "has_anemia",
+          "confidence",
+          "probability_no_anemia",
+          "probability_anemia",
+          "risk_level",
+          "disease",
+          "diagnosis",
+          "notes"
+        ],
+        "title": "AnemiaResponse",
+        "description": "Response model for anemia prediction",
+        "example": {
+          "confidence": 92.5,
+          "diagnosis": "Low probability of anemia. Continue preventive health care.",
+          "disease": "No Anemia Detected",
+          "has_anemia": false,
+          "notes": "This is an AI-assisted screening tool. Always consult healthcare professionals.",
+          "prediction": 0,
+          "probability_anemia": 7.5,
+          "probability_no_anemia": 92.5,
+          "risk_level": "Low",
+          "success": true
+        }
+      },
+      "Body_predict_fracture_endpoint_predict_fracture_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "format": "binary",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_predict_fracture_endpoint_predict_fracture_post"
+      },
+      "Body_predict_predict_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "format": "binary",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_predict_predict_post"
+      },
+      "Body_predict_skin_defense_endpoint_predict_skin_defense_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "format": "binary",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_predict_skin_defense_endpoint_predict_skin_defense_post"
+      },
+      "Body_upload_prescription_api_prescriptions_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "format": "binary",
+            "title": "File"
+          },
+          "branch_id": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Branch Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file",
+          "branch_id"
+        ],
+        "title": "Body_upload_prescription_api_prescriptions_post"
+      },
+      "BranchCreate": {
+        "properties": {
+          "pharmacy_id": {
+            "type": "string",
+            "title": "Pharmacy Id"
+          },
+          "branch_name": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 2,
+            "title": "Branch Name"
+          },
+          "address": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 2,
+            "title": "Address"
+          },
+          "phone": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 30,
+                "minLength": 5
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone"
+          },
+          "latitude": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 90.0,
+                "minimum": -90.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latitude"
+          },
+          "longitude": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 180.0,
+                "minimum": -180.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Longitude"
+          }
+        },
+        "type": "object",
+        "required": [
+          "pharmacy_id",
+          "branch_name",
+          "address"
+        ],
+        "title": "BranchCreate"
+      },
+      "BranchUpdate": {
+        "properties": {
+          "branch_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200,
+                "minLength": 2
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Branch Name"
+          },
+          "address": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500,
+                "minLength": 2
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address"
+          },
+          "phone": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 30,
+                "minLength": 5
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone"
+          },
+          "latitude": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 90.0,
+                "minimum": -90.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latitude"
+          },
+          "longitude": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 180.0,
+                "minimum": -180.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Longitude"
+          },
+          "storefront_status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StorefrontStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "accepting_reservations": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accepting Reservations"
+          },
+          "pickup_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pickup Enabled"
+          },
+          "delivery_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Delivery Enabled"
+          }
+        },
+        "type": "object",
+        "title": "BranchUpdate"
+      },
+      "ChangePasswordRequest": {
+        "properties": {
+          "current_password": {
+            "type": "string",
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Current Password"
+          },
+          "new_password": {
+            "type": "string",
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "New Password"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "current_password",
+          "new_password"
+        ],
+        "title": "ChangePasswordRequest"
+      },
+      "DiabetesInput": {
+        "properties": {
+          "age": {
+            "type": "number",
+            "title": "Age"
+          },
+          "bmi": {
+            "type": "number",
+            "title": "Bmi"
+          },
+          "hypertension": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "title": "Hypertension"
+          },
+          "heart_disease": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "title": "Heart Disease"
+          },
+          "smoking_history": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "title": "Smoking History"
+          },
+          "HbA1c_level": {
+            "type": "number",
+            "title": "Hba1C Level"
+          },
+          "blood_glucose_level": {
+            "type": "number",
+            "title": "Blood Glucose Level"
+          },
+          "gender": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "title": "Gender"
+          },
+          "cholesterol_level": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cholesterol Level",
+            "default": 0
+          },
+          "physical_activity": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Physical Activity",
+            "default": 0
+          },
+          "diet_quality": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Diet Quality",
+            "default": 0
+          },
+          "family_history": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Family History",
+            "default": 0
+          },
+          "waist_circumference": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Waist Circumference",
+            "default": 0
+          },
+          "systolic_bp": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Systolic Bp",
+            "default": 0
+          },
+          "diastolic_bp": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Diastolic Bp",
+            "default": 0
+          },
+          "triglycerides": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Triglycerides",
+            "default": 0
+          },
+          "class": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Class",
+            "default": 0
+          },
+          "id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id",
+            "default": 0
+          },
+          "no_pation": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "No Pation",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "required": [
+          "age",
+          "bmi",
+          "hypertension",
+          "heart_disease",
+          "smoking_history",
+          "HbA1c_level",
+          "blood_glucose_level",
+          "gender"
+        ],
+        "title": "DiabetesInput"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "HeartDiseaseInput": {
+        "properties": {
+          "age": {
+            "type": "number",
+            "maximum": 120.0,
+            "minimum": 1.0,
+            "title": "Age",
+            "description": "Age in years"
+          },
+          "trestbps": {
+            "type": "number",
+            "maximum": 250.0,
+            "minimum": 60.0,
+            "title": "Trestbps",
+            "description": "Resting blood pressure (mmHg)"
+          },
+          "chol": {
+            "type": "number",
+            "maximum": 700.0,
+            "minimum": 50.0,
+            "title": "Chol",
+            "description": "Serum cholesterol (mg/dL)"
+          },
+          "thalach": {
+            "type": "number",
+            "maximum": 250.0,
+            "minimum": 50.0,
+            "title": "Thalach",
+            "description": "Maximum heart rate achieved (bpm)"
+          },
+          "oldpeak": {
+            "type": "number",
+            "maximum": 10.0,
+            "minimum": 0.0,
+            "title": "Oldpeak",
+            "description": "ST depression (exercise vs rest)"
+          },
+          "fbs": {
+            "type": "integer",
+            "title": "Fbs",
+            "description": "Fasting blood sugar > 120 mg/dL (0=no, 1=yes)"
+          },
+          "sex": {
+            "type": "integer",
+            "title": "Sex",
+            "description": "Sex (0=female, 1=male)"
+          },
+          "cp": {
+            "type": "integer",
+            "title": "Cp",
+            "description": "Chest pain type (0=typical angina, 1=atypical, 2=non-anginal, 3=asymptomatic)"
+          },
+          "restecg": {
+            "type": "integer",
+            "title": "Restecg",
+            "description": "Resting ECG results (0=normal, 1=ST-T abnormality, 2=LV hypertrophy)"
+          },
+          "exang": {
+            "type": "integer",
+            "title": "Exang",
+            "description": "Exercise-induced angina (0=no, 1=yes)"
+          },
+          "slope": {
+            "type": "integer",
+            "title": "Slope",
+            "description": "Slope of peak exercise ST segment (0=upsloping, 1=flat, 2=downsloping)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "age",
+          "trestbps",
+          "chol",
+          "thalach",
+          "oldpeak",
+          "fbs",
+          "sex",
+          "cp",
+          "restecg",
+          "exang",
+          "slope"
+        ],
+        "title": "HeartDiseaseInput",
+        "description": "Input model for CardioTabNet heart disease prediction.\nIEEE Heart Disease dataset \u2014 11 features.\n\nRemoved vs old model: ca (major vessels), thal (thalassemia).\nThese were Cleveland dataset features not present in the IEEE dataset\nthat CardioTabNet was trained on.",
+        "example": {
+          "age": 55,
+          "chol": 240,
+          "cp": 3,
+          "exang": 1,
+          "fbs": 0,
+          "oldpeak": 1.5,
+          "restecg": 0,
+          "sex": 1,
+          "slope": 1,
+          "thalach": 150,
+          "trestbps": 130
+        }
+      },
+      "HeartDiseaseResponse": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success"
+          },
+          "prediction": {
+            "type": "integer",
+            "title": "Prediction"
+          },
+          "has_heart_disease": {
+            "type": "boolean",
+            "title": "Has Heart Disease"
+          },
+          "confidence": {
+            "type": "number",
+            "title": "Confidence"
+          },
+          "probability_no_disease": {
+            "type": "number",
+            "title": "Probability No Disease"
+          },
+          "probability_disease": {
+            "type": "number",
+            "title": "Probability Disease"
+          },
+          "risk_level": {
+            "type": "string",
+            "title": "Risk Level"
+          },
+          "disease": {
+            "type": "string",
+            "title": "Disease"
+          },
+          "diagnosis": {
+            "type": "string",
+            "title": "Diagnosis"
+          },
+          "recommendations": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Recommendations"
+          },
+          "threshold_used": {
+            "type": "number",
+            "title": "Threshold Used"
+          }
+        },
+        "type": "object",
+        "required": [
+          "success",
+          "prediction",
+          "has_heart_disease",
+          "confidence",
+          "probability_no_disease",
+          "probability_disease",
+          "risk_level",
+          "disease",
+          "diagnosis",
+          "recommendations",
+          "threshold_used"
+        ],
+        "title": "HeartDiseaseResponse",
+        "description": "Response model for CardioTabNet heart disease prediction.\nIdentical structure to the old response \u2014 frontend needs no changes.",
+        "example": {
+          "confidence": 89.2,
+          "diagnosis": "High probability (89.2%) of coronary heart disease detected. Immediate medical evaluation is strongly recommended.",
+          "disease": "Heart Disease Detected",
+          "has_heart_disease": true,
+          "prediction": 1,
+          "probability_disease": 89.2,
+          "probability_no_disease": 10.8,
+          "recommendations": [
+            "\ud83e\udd7c Immediate consultation with a cardiologist is strongly recommended."
+          ],
+          "risk_level": "Very High",
+          "success": true,
+          "threshold_used": 0.415
+        }
+      },
+      "InventoryCreate": {
+        "properties": {
+          "product_id": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Product Id"
+          },
+          "branch_id": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Branch Id"
+          },
+          "physical_quantity": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Physical Quantity",
+            "default": 0
+          },
+          "price": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Price"
+          },
+          "online_visibility": {
+            "type": "boolean",
+            "title": "Online Visibility",
+            "default": true
+          },
+          "reorder_level": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Reorder Level",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "required": [
+          "product_id",
+          "branch_id",
+          "price"
+        ],
+        "title": "InventoryCreate"
+      },
+      "InventoryCsvValidationRequest": {
+        "properties": {
+          "csv_text": {
+            "type": "string",
+            "maxLength": 1000000,
+            "minLength": 1,
+            "title": "Csv Text"
+          }
+        },
+        "type": "object",
+        "required": [
+          "csv_text"
+        ],
+        "title": "InventoryCsvValidationRequest"
+      },
+      "InventoryDashboardResponse": {
+        "properties": {
+          "summary": {
+            "$ref": "#/components/schemas/InventoryDashboardSummary"
+          },
+          "low_stock_items": {
+            "items": {
+              "$ref": "#/components/schemas/InventoryResponse"
+            },
+            "type": "array",
+            "title": "Low Stock Items"
+          },
+          "out_of_stock_items": {
+            "items": {
+              "$ref": "#/components/schemas/InventoryResponse"
+            },
+            "type": "array",
+            "title": "Out Of Stock Items"
+          },
+          "recent_movements": {
+            "items": {
+              "$ref": "#/components/schemas/StockMovementResponse"
+            },
+            "type": "array",
+            "title": "Recent Movements"
+          }
+        },
+        "type": "object",
+        "required": [
+          "summary",
+          "low_stock_items",
+          "out_of_stock_items",
+          "recent_movements"
+        ],
+        "title": "InventoryDashboardResponse"
+      },
+      "InventoryDashboardSummary": {
+        "properties": {
+          "total_products": {
+            "type": "integer",
+            "title": "Total Products"
+          },
+          "low_stock_products": {
+            "type": "integer",
+            "title": "Low Stock Products"
+          },
+          "out_of_stock_products": {
+            "type": "integer",
+            "title": "Out Of Stock Products"
+          },
+          "online_products": {
+            "type": "integer",
+            "title": "Online Products"
+          },
+          "offline_products": {
+            "type": "integer",
+            "title": "Offline Products"
+          },
+          "total_physical_units": {
+            "type": "integer",
+            "title": "Total Physical Units"
+          },
+          "total_reserved_units": {
+            "type": "integer",
+            "title": "Total Reserved Units"
+          },
+          "total_available_units": {
+            "type": "integer",
+            "title": "Total Available Units"
+          }
+        },
+        "type": "object",
+        "required": [
+          "total_products",
+          "low_stock_products",
+          "out_of_stock_products",
+          "online_products",
+          "offline_products",
+          "total_physical_units",
+          "total_reserved_units",
+          "total_available_units"
+        ],
+        "title": "InventoryDashboardSummary"
+      },
+      "InventoryDetailsUpdate": {
+        "properties": {
+          "price": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price"
+          },
+          "reorder_level": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reorder Level"
+          },
+          "online_visibility": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Online Visibility"
+          }
+        },
+        "type": "object",
+        "title": "InventoryDetailsUpdate"
+      },
+      "InventoryImportRequest": {
+        "properties": {
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/InventoryIntakeRow"
+            },
+            "type": "array",
+            "maxItems": 2000,
+            "title": "Rows"
+          }
+        },
+        "type": "object",
+        "required": [
+          "rows"
+        ],
+        "title": "InventoryImportRequest"
+      },
+      "InventoryImportResult": {
+        "properties": {
+          "imported": {
+            "type": "integer",
+            "title": "Imported"
+          },
+          "failed": {
+            "type": "integer",
+            "title": "Failed"
+          },
+          "inventory_items": {
+            "items": {
+              "$ref": "#/components/schemas/InventoryResponse"
+            },
+            "type": "array",
+            "title": "Inventory Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "imported",
+          "failed",
+          "inventory_items"
+        ],
+        "title": "InventoryImportResult"
+      },
+      "InventoryIntakeRow": {
+        "properties": {
+          "product_id": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Product Id"
+          },
+          "quantity": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Quantity"
+          },
+          "price": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Price"
+          },
+          "reorder_level": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Reorder Level",
+            "default": 0
+          },
+          "online_visibility": {
+            "type": "boolean",
+            "title": "Online Visibility",
+            "default": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "product_id",
+          "quantity",
+          "price"
+        ],
+        "title": "InventoryIntakeRow"
+      },
+      "InventoryIntakeRowResult": {
+        "properties": {
+          "row_number": {
+            "type": "integer",
+            "title": "Row Number"
+          },
+          "product_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Product Id"
+          },
+          "valid": {
+            "type": "boolean",
+            "title": "Valid"
+          },
+          "errors": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Errors"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/InventoryIntakeRow"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "row_number",
+          "valid"
+        ],
+        "title": "InventoryIntakeRowResult"
+      },
+      "InventoryIntakeValidationResponse": {
+        "properties": {
+          "total_rows": {
+            "type": "integer",
+            "title": "Total Rows"
+          },
+          "valid_rows": {
+            "type": "integer",
+            "title": "Valid Rows"
+          },
+          "invalid_rows": {
+            "type": "integer",
+            "title": "Invalid Rows"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/InventoryIntakeRowResult"
+            },
+            "type": "array",
+            "title": "Rows"
+          }
+        },
+        "type": "object",
+        "required": [
+          "total_rows",
+          "valid_rows",
+          "invalid_rows",
+          "rows"
+        ],
+        "title": "InventoryIntakeValidationResponse"
+      },
+      "InventoryQuantityUpdate": {
+        "properties": {
+          "physical_quantity": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Physical Quantity"
+          }
+        },
+        "type": "object",
+        "required": [
+          "physical_quantity"
+        ],
+        "title": "InventoryQuantityUpdate"
+      },
+      "InventoryResponse": {
+        "properties": {
+          "inventory_id": {
+            "type": "string",
+            "title": "Inventory Id"
+          },
+          "product_id": {
+            "type": "string",
+            "title": "Product Id"
+          },
+          "branch_id": {
+            "type": "string",
+            "title": "Branch Id"
+          },
+          "physical_quantity": {
+            "type": "integer",
+            "title": "Physical Quantity"
+          },
+          "reserved_quantity": {
+            "type": "integer",
+            "title": "Reserved Quantity"
+          },
+          "available_quantity": {
+            "type": "integer",
+            "title": "Available Quantity"
+          },
+          "price": {
+            "type": "number",
+            "title": "Price"
+          },
+          "online_visibility": {
+            "type": "boolean",
+            "title": "Online Visibility"
+          },
+          "reorder_level": {
+            "type": "integer",
+            "title": "Reorder Level"
+          },
+          "last_updated": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Last Updated"
+          }
+        },
+        "type": "object",
+        "required": [
+          "inventory_id",
+          "product_id",
+          "branch_id",
+          "physical_quantity",
+          "reserved_quantity",
+          "available_quantity",
+          "price",
+          "online_visibility",
+          "reorder_level",
+          "last_updated"
+        ],
+        "title": "InventoryResponse"
+      },
+      "KidneyDiseaseInput": {
+        "properties": {
+          "sex": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sex"
+          },
+          "age": {
+            "type": "number",
+            "title": "Age"
+          },
+          "bp": {
+            "type": "number",
+            "title": "Bp"
+          },
+          "sg": {
+            "type": "number",
+            "title": "Sg"
+          },
+          "al": {
+            "type": "number",
+            "title": "Al"
+          },
+          "su": {
+            "type": "number",
+            "title": "Su"
+          },
+          "bgr": {
+            "type": "number",
+            "title": "Bgr"
+          },
+          "bu": {
+            "type": "number",
+            "title": "Bu"
+          },
+          "sc": {
+            "type": "number",
+            "title": "Sc"
+          },
+          "sod": {
+            "type": "number",
+            "title": "Sod"
+          },
+          "pot": {
+            "type": "number",
+            "title": "Pot"
+          },
+          "hemo": {
+            "type": "number",
+            "title": "Hemo"
+          },
+          "pcv": {
+            "type": "number",
+            "title": "Pcv"
+          },
+          "wc": {
+            "type": "number",
+            "title": "Wc"
+          },
+          "rc": {
+            "type": "number",
+            "title": "Rc"
+          },
+          "htn": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Htn"
+          },
+          "dm": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Dm"
+          },
+          "ane": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Ane"
+          },
+          "pe": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Pe"
+          },
+          "rbc": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rbc"
+          },
+          "pc": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pc"
+          },
+          "pcc": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pcc"
+          },
+          "ba": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ba"
+          },
+          "cad": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cad"
+          },
+          "appet": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Appet"
+          }
+        },
+        "type": "object",
+        "required": [
+          "age",
+          "bp",
+          "sg",
+          "al",
+          "su",
+          "bgr",
+          "bu",
+          "sc",
+          "sod",
+          "pot",
+          "hemo",
+          "pcv",
+          "wc",
+          "rc",
+          "htn",
+          "dm",
+          "ane",
+          "pe"
+        ],
+        "title": "KidneyDiseaseInput",
+        "description": "Kidney prediction (19 features); accepts old names via aliases."
+      },
+      "MatchStatus": {
+        "type": "string",
+        "enum": [
+          "unmatched",
+          "possible",
+          "matched"
+        ],
+        "title": "MatchStatus"
+      },
+      "MedicalHistory": {
+        "properties": {
+          "user_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Id"
+          },
+          "condition": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Condition"
+          },
+          "diagnosis_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Diagnosis Date"
+          },
+          "treatment": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Treatment"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 5000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "condition"
+        ],
+        "title": "MedicalHistory"
+      },
+      "OCRMedicationDraft": {
+        "properties": {
+          "line_id": {
+            "type": "string",
+            "title": "Line Id"
+          },
+          "raw_text": {
+            "type": "string",
+            "title": "Raw Text"
+          },
+          "extracted_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extracted Name"
+          },
+          "strength": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Strength"
+          },
+          "dosage_form": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dosage Form"
+          },
+          "directions": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Directions"
+          },
+          "quantity": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quantity"
+          },
+          "confidence": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 1.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence"
+          },
+          "matched_medication_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matched Medication Id"
+          },
+          "match_status": {
+            "$ref": "#/components/schemas/MatchStatus",
+            "default": "unmatched"
+          }
+        },
+        "type": "object",
+        "required": [
+          "line_id",
+          "raw_text"
+        ],
+        "title": "OCRMedicationDraft"
+      },
+      "OCRStatus": {
+        "type": "string",
+        "enum": [
+          "not_started",
+          "processing",
+          "draft_ready",
+          "failed"
+        ],
+        "title": "OCRStatus"
+      },
+      "PharmacyCreate": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 2,
+            "title": "Name"
+          },
+          "license_number": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "License Number"
+          },
+          "phone": {
+            "type": "string",
+            "maxLength": 30,
+            "minLength": 5,
+            "title": "Phone"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "email"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "license_number",
+          "phone"
+        ],
+        "title": "PharmacyCreate"
+      },
+      "PharmacyUpdate": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200,
+                "minLength": 2
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "license_number": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "License Number"
+          },
+          "phone": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 30,
+                "minLength": 5
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "email"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          }
+        },
+        "type": "object",
+        "title": "PharmacyUpdate"
+      },
+      "PrescriptionFileMetadata": {
+        "properties": {
+          "original_name": {
+            "type": "string",
+            "title": "Original Name"
+          },
+          "content_type": {
+            "type": "string",
+            "title": "Content Type"
+          },
+          "size_bytes": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Size Bytes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "original_name",
+          "content_type",
+          "size_bytes"
+        ],
+        "title": "PrescriptionFileMetadata"
+      },
+      "PrescriptionResponse": {
+        "properties": {
+          "prescription_id": {
+            "type": "string",
+            "title": "Prescription Id"
+          },
+          "patient_id": {
+            "type": "string",
+            "title": "Patient Id"
+          },
+          "branch_id": {
+            "type": "string",
+            "title": "Branch Id"
+          },
+          "status": {
+            "$ref": "#/components/schemas/PrescriptionStatus"
+          },
+          "ocr_status": {
+            "$ref": "#/components/schemas/OCRStatus"
+          },
+          "file": {
+            "$ref": "#/components/schemas/PrescriptionFileMetadata"
+          },
+          "ocr_items": {
+            "items": {
+              "$ref": "#/components/schemas/OCRMedicationDraft"
+            },
+            "type": "array",
+            "title": "Ocr Items"
+          },
+          "reviewed_items": {
+            "items": {
+              "$ref": "#/components/schemas/ReviewedMedication"
+            },
+            "type": "array",
+            "title": "Reviewed Items"
+          },
+          "reviewed_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewed By"
+          },
+          "review_notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Review Notes"
+          },
+          "reviewed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewed At"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "prescription_id",
+          "patient_id",
+          "branch_id",
+          "status",
+          "ocr_status",
+          "file",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "PrescriptionResponse"
+      },
+      "PrescriptionReviewRequest": {
+        "properties": {
+          "decision": {
+            "$ref": "#/components/schemas/ReviewDecision"
+          },
+          "reviewed_items": {
+            "items": {
+              "$ref": "#/components/schemas/ReviewedMedication"
+            },
+            "type": "array",
+            "title": "Reviewed Items"
+          },
+          "review_notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Review Notes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "decision"
+        ],
+        "title": "PrescriptionReviewRequest"
+      },
+      "PrescriptionStatus": {
+        "type": "string",
+        "enum": [
+          "uploaded",
+          "ocr_processing",
+          "pending_review",
+          "reviewed",
+          "rejected",
+          "cancelled"
+        ],
+        "title": "PrescriptionStatus"
+      },
+      "ReviewDecision": {
+        "type": "string",
+        "enum": [
+          "approve",
+          "reject"
+        ],
+        "title": "ReviewDecision"
+      },
+      "ReviewedMedication": {
+        "properties": {
+          "line_id": {
+            "type": "string",
+            "title": "Line Id"
+          },
+          "medication_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Medication Id"
+          },
+          "confirmed_name": {
+            "type": "string",
+            "title": "Confirmed Name"
+          },
+          "strength": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Strength"
+          },
+          "dosage_form": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dosage Form"
+          },
+          "directions": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Directions"
+          },
+          "quantity": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quantity"
+          },
+          "pharmacist_notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pharmacist Notes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "line_id",
+          "confirmed_name"
+        ],
+        "title": "ReviewedMedication"
+      },
+      "RoleChange": {
+        "properties": {
+          "role": {
+            "type": "string",
+            "enum": [
+              "patient",
+              "admin"
+            ],
+            "title": "Role"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "role"
+        ],
+        "title": "RoleChange"
+      },
+      "StaffAssignment": {
+        "properties": {
+          "pharmacy_id": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Pharmacy Id"
+          },
+          "staff_role": {
+            "type": "string",
+            "enum": [
+              "owner",
+              "pharmacist",
+              "inventory"
+            ],
+            "title": "Staff Role"
+          },
+          "branch_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array",
+                "maxItems": 100
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Branch Ids"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "pharmacy_id",
+          "staff_role"
+        ],
+        "title": "StaffAssignment"
+      },
+      "StaffGrant": {
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email",
+            "title": "Email"
+          },
+          "staff_role": {
+            "type": "string",
+            "enum": [
+              "owner",
+              "pharmacist",
+              "inventory"
+            ],
+            "title": "Staff Role"
+          },
+          "branch_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array",
+                "maxItems": 100
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Branch Ids"
+          }
+        },
+        "type": "object",
+        "required": [
+          "email",
+          "staff_role"
+        ],
+        "title": "StaffGrant",
+        "description": "Owner/admin gives an EXISTING MediCheck user access to the pharmacy."
+      },
+      "StockMovementResponse": {
+        "properties": {
+          "movement_id": {
+            "type": "string",
+            "title": "Movement Id"
+          },
+          "inventory_id": {
+            "type": "string",
+            "title": "Inventory Id"
+          },
+          "product_id": {
+            "type": "string",
+            "title": "Product Id"
+          },
+          "branch_id": {
+            "type": "string",
+            "title": "Branch Id"
+          },
+          "actor": {
+            "type": "string",
+            "title": "Actor"
+          },
+          "movement_type": {
+            "$ref": "#/components/schemas/StockMovementType"
+          },
+          "physical_quantity_change": {
+            "type": "integer",
+            "title": "Physical Quantity Change"
+          },
+          "reserved_quantity_change": {
+            "type": "integer",
+            "title": "Reserved Quantity Change"
+          },
+          "resulting_physical_quantity": {
+            "type": "integer",
+            "title": "Resulting Physical Quantity"
+          },
+          "resulting_reserved_quantity": {
+            "type": "integer",
+            "title": "Resulting Reserved Quantity"
+          },
+          "resulting_available_quantity": {
+            "type": "integer",
+            "title": "Resulting Available Quantity"
+          },
+          "related_order_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Related Order Id"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Timestamp"
+          }
+        },
+        "type": "object",
+        "required": [
+          "movement_id",
+          "inventory_id",
+          "product_id",
+          "branch_id",
+          "actor",
+          "movement_type",
+          "physical_quantity_change",
+          "reserved_quantity_change",
+          "resulting_physical_quantity",
+          "resulting_reserved_quantity",
+          "resulting_available_quantity",
+          "timestamp"
+        ],
+        "title": "StockMovementResponse"
+      },
+      "StockMovementType": {
+        "type": "string",
+        "enum": [
+          "manual_add",
+          "correction",
+          "import",
+          "reservation",
+          "release",
+          "completion"
+        ],
+        "title": "StockMovementType"
+      },
+      "StorefrontStatus": {
+        "type": "string",
+        "enum": [
+          "online",
+          "offline"
+        ],
+        "title": "StorefrontStatus"
+      },
+      "UserLogin": {
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email",
+            "title": "Email"
+          },
+          "password": {
+            "type": "string",
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Password"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "email",
+          "password"
+        ],
+        "title": "UserLogin"
+      },
+      "UserSignup": {
+        "properties": {
+          "firstName": {
+            "type": "string",
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Firstname"
+          },
+          "lastName": {
+            "type": "string",
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Lastname"
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "title": "Email"
+          },
+          "password": {
+            "type": "string",
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Password"
+          },
+          "confirmPassword": {
+            "type": "string",
+            "maxLength": 256,
+            "title": "Confirmpassword"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "firstName",
+          "lastName",
+          "email",
+          "password",
+          "confirmPassword"
+        ],
+        "title": "UserSignup",
+        "description": "What the CLIENT sends to POST /register.\n\nThis class must NEVER be used to build the database document: it contains\nthe plaintext password. (That was exactly the Phase 1 bug: the old code did\n`user_data.dict()` and inserted the result, plaintext password included.)"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      },
+      "VerificationAction": {
+        "properties": {
+          "status": {
+            "$ref": "#/components/schemas/VerificationDecision"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "VerificationAction"
+      },
+      "VerificationDecision": {
+        "type": "string",
+        "enum": [
+          "approved",
+          "rejected",
+          "request_info",
+          "suspended"
+        ],
+        "title": "VerificationDecision"
+      }
+    },
+    "securitySchemes": {
+      "OAuth2PasswordBearer": {
+        "type": "oauth2",
+        "flows": {
+          "password": {
+            "scopes": {},
+            "tokenUrl": "login"
+          }
+        }
+      }
+    }
+  }
+}

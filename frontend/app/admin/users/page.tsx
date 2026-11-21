@@ -1,6 +1,10 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
+import { apiJson } from "@/lib/auth-client"
+import { STAFF_ROLE_LABEL, listPharmacies, type AdminPharmacy, type Membership } from "@/lib/admin-api"
+import { CreateUserDialog, ManageAccessDialog, pharmacyName, type ManagedUser } from "@/components/admin/user-role-dialogs"
+import { Badge } from "@/components/ui/badge"
 import {
   Search,
   MoreHorizontal,
@@ -20,13 +24,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from "@/components/ui/dialog"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -54,6 +51,10 @@ interface User {
   email: string
   dateJoined: string
   histories: MedicalHistory[]
+  // returned by GET /users since the role-management merge
+  role?: string
+  isDisabled?: boolean
+  memberships?: Membership[]
 }
 
 export default function UsersManagement() {
@@ -63,34 +64,30 @@ export default function UsersManagement() {
   const [activeTab, setActiveTab] = useState("all")
   const [selectedUsers, setSelectedUsers] = useState<string[]>([])
   const [filter, setFilter] = useState<"all" | "withHistory" | "withoutHistory">("all")
-  console.log("Token from localStorage:", localStorage.getItem("authToken"))
+  const [pharmacies, setPharmacies] = useState<AdminPharmacy[]>([])
+  const [managedUser, setManagedUser] = useState<ManagedUser | null>(null)
+
+  const fetchUsers = useCallback(async () => {
+    try {
+      // Same API base as the rest of the app; token attached by authFetch.
+      // Non-admins get 403 from the server regardless of what the UI shows.
+      const data = await apiJson<User[]>("/users")
+      setUsers(data)
+      // keep an open "Manage access" dialog in sync with the refreshed row
+      setManagedUser((open) => {
+        if (!open) return open
+        const row = data.find((u) => u.id === open.id)
+        return row ? toManaged(row) : null
+      })
+    } catch (error) {
+      console.error("Error fetching users:", error)
+    }
+  }, [])
 
   useEffect(() => {
-    async function fetchUsers() {
-      try {
-        const token = localStorage.getItem("access_token") || "";
-
-        const response = await fetch("https://faridaaaa-medical-diagnosis-api.hf.space/users", {
-          method: "GET",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-        })
-
-        if (!response.ok) {
-          throw new Error(`Failed to fetch users: ${response.statusText}`)
-        }
-
-        const data = await response.json()
-        setUsers(data)
-      } catch (error) {
-        console.error("Error fetching users:", error)
-      }
-    }
-
     fetchUsers()
-  }, [])
+    listPharmacies().then(setPharmacies).catch((error) => console.error("Error fetching pharmacies:", error))
+  }, [fetchUsers])
 
   
   const filteredUsers = users.filter((user) => {
@@ -221,6 +218,7 @@ export default function UsersManagement() {
                 </th>
                 <th className="px-6 py-3 text-left text-sm font-medium text-gray-500">User</th>
                 <th className="px-6 py-3 text-left text-sm font-medium text-gray-500">Email</th>
+                <th className="px-6 py-3 text-left text-sm font-medium text-gray-500">Role</th>
                 <th className="px-6 py-3 text-left text-sm font-medium text-gray-500">Date Joined</th>
                 <th className="px-6 py-3 text-left text-sm font-medium text-gray-500">Medical History Count</th>
                 <th className="px-6 py-3 text-right text-sm font-medium text-gray-500">Actions</th>
@@ -229,7 +227,7 @@ export default function UsersManagement() {
             <tbody>
               {filteredUsers.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-8 text-center">
+                  <td colSpan={7} className="px-6 py-8 text-center">
                     <div className="flex flex-col items-center justify-center">
                       <Search className="h-8 w-8 text-gray-400 mb-2" />
                       <h3 className="text-lg font-medium text-gray-900 mb-1">No users found</h3>
@@ -249,6 +247,9 @@ export default function UsersManagement() {
                     </td>
                     <td className="px-6 py-4 font-medium">{user.name}</td>
                     <td className="px-6 py-4 text-sm text-gray-500">{user.email}</td>
+                    <td className="px-6 py-4 text-sm">
+                      <RoleBadges user={user} pharmacies={pharmacies} />
+                    </td>
                     <td className="px-6 py-4 text-sm text-gray-500">{user.dateJoined}</td>
                     <td className="px-6 py-4 text-sm text-gray-500">{user.histories.length}</td>
                     <td className="px-6 py-4 text-right">
@@ -260,7 +261,7 @@ export default function UsersManagement() {
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                           <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                          <DropdownMenuItem>
+                          <DropdownMenuItem onSelect={() => setManagedUser(toManaged(user))}>
                             <Edit className="h-4 w-4 mr-2" />
                             Edit User
                           </DropdownMenuItem>
@@ -286,15 +287,49 @@ export default function UsersManagement() {
       </Card>
 
       
-      <Dialog open={showAddUserDialog} onOpenChange={setShowAddUserDialog}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Add New User</DialogTitle>
-            <DialogDescription>Create a new user account and assign role permissions</DialogDescription>
-          </DialogHeader>
-          
-        </DialogContent>
-      </Dialog>
+      <CreateUserDialog
+        open={showAddUserDialog}
+        onOpenChange={setShowAddUserDialog}
+        pharmacies={pharmacies}
+        onCreated={fetchUsers}
+      />
+
+      <ManageAccessDialog
+        user={managedUser}
+        onOpenChange={(open) => { if (!open) setManagedUser(null) }}
+        pharmacies={pharmacies}
+        onChanged={fetchUsers}
+      />
+    </div>
+  )
+}
+
+function toManaged(user: User): ManagedUser {
+  return {
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    role: user.role ?? "patient",
+    memberships: user.memberships ?? [],
+  }
+}
+
+function RoleBadges({ user, pharmacies }: { user: User; pharmacies: AdminPharmacy[] }) {
+  const memberships = user.memberships ?? []
+  return (
+    <div className="flex flex-wrap gap-1">
+      {user.role === "admin" ? (
+        <Badge>Administrator</Badge>
+      ) : memberships.length === 0 ? (
+        <Badge variant="outline">Patient</Badge>
+      ) : (
+        memberships.map((m) => (
+          <Badge key={m.pharmacy_id} variant="secondary">
+            {STAFF_ROLE_LABEL[m.staff_role] ?? m.staff_role} · {pharmacyName(pharmacies, m.pharmacy_id)}
+          </Badge>
+        ))
+      )}
+      {user.isDisabled && <Badge variant="destructive">Disabled</Badge>}
     </div>
   )
 }

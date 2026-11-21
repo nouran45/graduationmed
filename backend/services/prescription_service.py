@@ -1,8 +1,17 @@
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 from pymongo import ReturnDocument
 from database import prescriptions_collection
+from security.config import get_settings
+from security.request_context import add_detail
+from security.uploads import (
+    CONTENT_TYPE,
+    EXTENSION,
+    safe_display_filename,
+    sniff_type,
+)
 from schemas.prescription import (
     MatchStatus,
     OCRStatus,
@@ -16,23 +25,18 @@ from schemas.prescription import (
 # PRIVATE PRESCRIPTION STORAGE
 # =========================================================
 
-PRIVATE_UPLOAD_ROOT = (
-    Path(__file__).resolve().parents[1]
-    / "private_uploads"
-    / "prescriptions"
+# Override with PRIVATE_UPLOAD_ROOT to point at a PERSISTENT volume.
+# On a Hugging Face Space the default (inside the app directory) is wiped on
+# every restart/redeploy, so prescription files would silently disappear.
+PRIVATE_UPLOAD_ROOT = Path(
+    os.getenv("PRIVATE_UPLOAD_ROOT")
+    or (Path(__file__).resolve().parents[1] / "private_uploads" / "prescriptions")
 )
 
 PRIVATE_UPLOAD_ROOT.mkdir(
     parents=True,
     exist_ok=True,
 )
-
-
-ALLOWED_CONTENT_TYPES = {
-    "image/jpeg",
-    "image/png",
-    "application/pdf",
-}
 
 
 # =========================================================
@@ -70,9 +74,14 @@ def _generate_prescription_id() -> str:
 
 def _validate_upload(
     filename: str,
-    content_type: str,
     file_bytes: bytes,
-) -> None:
+) -> str:
+    """
+    Validate by CONTENT, not by what the client claims.
+
+    The client-supplied Content-Type header and file extension are ignored:
+    both are trivially forged. Returns the sniffed kind: jpeg | png | pdf.
+    """
     if not filename.strip():
         raise ValueError(
             "Prescription filename is required."
@@ -83,29 +92,37 @@ def _validate_upload(
             "The selected prescription file is empty."
         )
 
-    if content_type not in ALLOWED_CONTENT_TYPES:
+    if len(file_bytes) > get_settings().max_prescription_bytes:
+        raise ValueError(
+            "The prescription file is too large."
+        )
+
+    kind = sniff_type(file_bytes)
+
+    add_detail("file_kind", kind or "unknown")
+
+    if kind is None:
         raise ValueError(
             "Only JPG, PNG and PDF files are supported."
         )
 
+    return kind
+
 
 def _save_private_file(
     prescription_id: str,
-    original_filename: str,
+    kind: str,
     file_bytes: bytes,
 ) -> Path:
     """
-    Save the uploaded prescription outside the public
-    frontend tree.
+    Save the uploaded prescription outside the public frontend tree.
 
-    The generated filename is used instead of trusting
-    the user's original filename.
+    The stored name is generated server-side and the extension comes from the
+    sniffed file type. The user's filename never touches the file system.
     """
 
-    suffix = Path(original_filename).suffix.lower()
-
     stored_filename = (
-        f"{prescription_id}{suffix}"
+        f"{prescription_id}{EXTENSION[kind]}"
     )
 
     storage_path = (
@@ -154,12 +171,10 @@ def create_prescription(
     patient_id: str,
     branch_id: str,
     filename: str,
-    content_type: str,
     file_bytes: bytes,
 ) -> dict:
-    _validate_upload(
+    kind = _validate_upload(
         filename,
-        content_type,
         file_bytes,
     )
 
@@ -169,7 +184,7 @@ def create_prescription(
 
     storage_path = _save_private_file(
         prescription_id,
-        filename,
+        kind,
         file_bytes,
     )
 
@@ -192,8 +207,8 @@ def create_prescription(
             OCRStatus.DRAFT_READY.value,
 
         "file": {
-            "original_name": filename,
-            "content_type": content_type,
+            "original_name": safe_display_filename(filename),
+            "content_type": CONTENT_TYPE[kind],
             "size_bytes": len(file_bytes),
         },
 

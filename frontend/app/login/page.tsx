@@ -10,8 +10,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Logo } from "@/components/logo"
 import { useToast } from "@/hooks/use-toast"
-
-const API_BASE = (process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:8000").replace(/\/$/, "")
+import { API_BASE, apiJson, clearSession, getToken, login } from "@/lib/auth-client"
 
 export default function LoginPage() {
   const router = useRouter()
@@ -22,100 +21,33 @@ export default function LoginPage() {
   const [password, setPassword] = useState("")
 
   useEffect(() => {
-    // Verify token validity before redirecting
-    const verifyToken = async () => {
-      const token = localStorage.getItem("access_token")
-      if (token) {
-        try {
-          const response = await fetch(`${API_BASE}/verify-token`, {
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-          })
-
-          if (response.ok) {
-            router.push("/dashboard")
-          } else {
-            localStorage.removeItem("access_token")
-            localStorage.removeItem("user")
-            localStorage.removeItem("isLoggedIn")
-          }
-        } catch (error) {
-          localStorage.removeItem("access_token")
-          localStorage.removeItem("user")
-          localStorage.removeItem("isLoggedIn")
-        }
+    // If a valid server-side session already exists, skip the login form.
+    const checkSession = async () => {
+      if (!getToken()) return
+      try {
+        await apiJson("/verify-token")
+        router.push("/dashboard")
+      } catch {
+        clearSession()
       }
     }
-
-    verifyToken()
+    checkSession()
   }, [router])
-
-  const handleLogin = async (credentials: { email: string; password: string }) => {
-    try {
-      const response = await fetch(`${API_BASE}/login`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          email: credentials.email,
-          password: credentials.password,
-        }),
-      })
-
-      if (!response.ok) {
-        let errorMessage = "Login failed"
-
-        try {
-          const errorData = await response.json()
-
-          if (Array.isArray(errorData.detail)) {
-            errorMessage = errorData.detail
-              .map((err: any) => `${err.loc.join(".")}: ${err.msg}`)
-              .join("\n")
-          } else if (typeof errorData.detail === "string") {
-            errorMessage = errorData.detail
-          } else if (errorData.message) {
-            errorMessage = errorData.message
-          }
-        } catch (e) {
-          errorMessage = response.statusText || "Login failed"
-        }
-
-        throw new Error(errorMessage)
-      }
-
-      const data = await response.json()
-
-      if (!data.access_token) {
-        throw new Error("No access token received")
-      }
-
-      localStorage.setItem("access_token", data.access_token)
-      localStorage.setItem("user", JSON.stringify(data.user || {}))
-      localStorage.setItem("isLoggedIn", "true")
-
-      return data
-    } catch (error) {
-      console.error("Login error:", error)
-      throw error
-    }
-  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
 
     try {
-      await handleLogin({ email, password })
+      const user = await login(email, password)
 
       toast({
         title: "Login successful",
         description: "You are now logged in to your account.",
       })
 
-      const user = JSON.parse(localStorage.getItem("user") || "{}")
+      // The role comes from the server response. The admin area re-verifies it
+      // with the server again, so this redirect is only a convenience.
       router.push(user.role === "admin" ? "/admin" : "/dashboard")
     } catch (error: any) {
       let errorMessage = "Invalid email or password. Please try again."

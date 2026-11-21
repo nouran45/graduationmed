@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation"
 import { BarChart3, Settings, Users, LogOut, AlertTriangle, Home, Shield, Menu, X } from "lucide-react"
 
 import { Logo } from "@/components/logo"
+import { fetchMe, logout } from "@/lib/auth-client"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 
@@ -17,33 +18,31 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   useEffect(() => {
-    // Check if user is logged in and is an admin
-    const isLoggedIn = localStorage.getItem("isLoggedIn") === "true"
-    if (!isLoggedIn) {
-      router.push("/login")
-      return
-    }
-
-    // Get user data
-    const userData = localStorage.getItem("user")
-    if (userData) {
-      const parsedUser = JSON.parse(userData)
-      setUser(parsedUser)
-
-      // Check if user is an admin
-      if (parsedUser.role !== "admin") {
-        router.push("/dashboard")
-        return
+    // UX guard only. The authoritative check is the backend: every /users and
+    // /api/admin/* call is rejected with 403 unless the server-side role is
+    // "admin". localStorage is NOT consulted for the decision.
+    let cancelled = false
+    ;(async () => {
+      try {
+        const me = await fetchMe() // GET /users/me -> role read from the database
+        if (cancelled) return
+        if (me.role !== "admin") {
+          router.replace("/dashboard")
+          return
+        }
+        setUser(me)
+        setLoading(false)
+      } catch {
+        if (!cancelled) router.replace("/login")
       }
+    })()
+    return () => {
+      cancelled = true
     }
-
-    setLoading(false)
   }, [router])
 
-  const handleLogout = () => {
-    localStorage.removeItem("isLoggedIn")
-    localStorage.removeItem("user")
-    router.push("/login")
+  const handleLogout = async () => {
+    await logout("/login") // revoke the server session, then clear local state
   }
 
   if (loading) {
