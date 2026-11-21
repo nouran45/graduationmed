@@ -8,25 +8,54 @@ from pydantic import BaseModel, EmailStr, Field, field_validator, ConfigDict, Al
 # -------- Auth / Users --------
 
 class UserSignup(BaseModel):
-    firstName: str = Field(..., alias="firstName")
-    lastName: str = Field(..., alias="lastName")
+    """
+    What the CLIENT sends to POST /register.
+
+    This class must NEVER be used to build the database document: it contains
+    the plaintext password. (That was exactly the Phase 1 bug: the old code did
+    `user_data.dict()` and inserted the result, plaintext password included.)
+    """
+    firstName: str = Field(..., min_length=1, max_length=80, alias="firstName")
+    lastName: str = Field(..., min_length=1, max_length=80, alias="lastName")
     email: EmailStr
-    password: str
-    confirmPassword: str = Field(..., alias="confirmPassword")
+    password: str = Field(..., min_length=1, max_length=256)
+    confirmPassword: str = Field(..., max_length=256, alias="confirmPassword")
 
     model_config = ConfigDict(
         from_attributes=True,
         populate_by_name=True,
+        extra="forbid",          # reject unexpected fields (e.g. "role": "admin")
     )
 
 
 class UserLogin(BaseModel):
     email: EmailStr
-    password: str
+    password: str = Field(..., min_length=1, max_length=256)
+
+    model_config = ConfigDict(extra="forbid")
 
 
-class UserInDB(UserSignup):
+class ChangePasswordRequest(BaseModel):
+    current_password: str = Field(..., min_length=1, max_length=256)
+    new_password: str = Field(..., min_length=1, max_length=256)
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class UserInDB(BaseModel):
+    """
+    The shape of a document in the `users` collection.
+
+    Deliberately NOT a subclass of UserSignup: there is no `password` and no
+    `confirmPassword` field here, so it is structurally impossible to persist
+    one through this model.
+    """
+    firstName: str
+    lastName: str
+    email: EmailStr
     hashed_password: str
+    role: str = "patient"
+    is_disabled: bool = False
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
@@ -34,11 +63,11 @@ class UserInDB(UserSignup):
 # -------- Medical History --------
 
 class MedicalHistory(BaseModel):
-    user_id: Optional[str] = None
-    condition: str
+    user_id: Optional[str] = None      # ignored by the server: identity comes from the session
+    condition: str = Field(..., min_length=1, max_length=200)
     diagnosis_date: Optional[datetime] = None
-    treatment: Optional[str] = None
-    notes: Optional[str] = None
+    treatment: Optional[str] = Field(default=None, max_length=2000)
+    notes: Optional[str] = Field(default=None, max_length=5000)
 
 
 class ChatRequest(BaseModel):

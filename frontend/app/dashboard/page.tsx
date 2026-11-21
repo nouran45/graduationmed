@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronDown, ChevronUp, FileText, LogOut, Search, User } from "lucide-react";
+import { ChevronDown, ChevronUp, FileText, LogOut, Search, ShieldCheck, User } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -23,6 +23,8 @@ type MedicalRecord = {
   hideConfidence?: boolean;
   hide_confidence?: boolean;
 };
+
+import { clearSession, logout } from "@/lib/auth-client";
 
 // 1) Optional manual override via env (wins if set)
 const ENV_BASE = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "")
@@ -162,10 +164,7 @@ export default function DashboardPage() {
           variant: "destructive",
         });
         // If it's an auth problem, clear and redirect
-        localStorage.removeItem("access_token");
-        localStorage.removeItem("authToken");
-        localStorage.removeItem("token");
-        localStorage.removeItem("user");
+        clearSession();
         router.push("/login");
         return;
       } finally {
@@ -192,11 +191,8 @@ export default function DashboardPage() {
   const toggleRecord = (id: string) =>
     setExpandedRecord((cur) => (cur === id ? null : id));
 
-  const handleLogout = () => {
-    localStorage.removeItem("access_token");
-    localStorage.removeItem("authToken");
-    localStorage.removeItem("token");
-    localStorage.removeItem("user");
+  const handleLogout = async () => {
+    await logout(null);            // revokes the session on the server, then clears local state
     toast({ title: "Logged out", description: "You have been successfully logged out." });
     router.push("/");
   };
@@ -217,6 +213,13 @@ export default function DashboardPage() {
             <Logo />
             <h1 className="text-xl font-bold text-secondary hidden md:block">Medical History Dashboard</h1>
             <div className="flex items-center gap-4">
+              {/* Navigation only: the /admin layout re-checks the role with the server. */}
+              {user?.role === "admin" && (
+                <Button size="sm" className="bg-primary text-white hover:bg-primary/90" onClick={() => router.push("/admin")}>
+                  <ShieldCheck className="h-4 w-4 mr-2" />
+                  Admin Dashboard
+                </Button>
+              )}
               <Button
                 variant="outline"
                 size="sm"

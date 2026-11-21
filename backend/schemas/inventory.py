@@ -9,8 +9,8 @@ from pydantic import BaseModel, Field
 # =========================================================
 
 class InventoryCreate(BaseModel):
-    product_id: str
-    branch_id: str
+    product_id: str = Field(min_length=1, max_length=64)
+    branch_id: str = Field(min_length=1, max_length=64)
 
     physical_quantity: int = Field(default=0, ge=0)
     price: float = Field(ge=0)
@@ -86,7 +86,7 @@ class StockMovementResponse(BaseModel):
 # =========================================================
 
 class InventoryIntakeRow(BaseModel):
-    product_id: str = Field(min_length=1)
+    product_id: str = Field(min_length=1, max_length=64)
 
     quantity: int = Field(ge=0)
     price: float = Field(ge=0)
@@ -114,11 +114,11 @@ class InventoryIntakeValidationResponse(BaseModel):
     rows: list[InventoryIntakeRowResult]
 
 class InventoryCsvValidationRequest(BaseModel):
-    csv_text: str = Field(min_length=1)
+    csv_text: str = Field(min_length=1, max_length=1_000_000)   # ~1 MB
 
 
 class InventoryImportRequest(BaseModel):
-    rows: list[InventoryIntakeRow]
+    rows: list[InventoryIntakeRow] = Field(max_length=2000)
 
 
 class InventoryImportResult(BaseModel):

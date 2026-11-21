@@ -7,6 +7,10 @@ from database import (
     verification_collection,
 )
 
+from bson import ObjectId
+
+from security.authorization import grant_membership
+
 from schemas.pharmacy import (
     PharmacyCreate,
     PharmacyUpdate,
@@ -16,6 +20,10 @@ from schemas.pharmacy import (
     VerificationDecision,
     StorefrontStatus,
 )
+
+class VerificationAlreadyPending(Exception):
+    """A pharmacy already has an open verification request."""
+
 
 # =========================================================
 # SHARED HELPERS
@@ -43,11 +51,15 @@ def _serialize_document(document: dict | None) -> dict | None:
 # PHARMACY
 # =========================================================
 
-def create_pharmacy(data: PharmacyCreate) -> dict:
+def create_pharmacy(data: PharmacyCreate, owner_user_id: ObjectId) -> dict:
     """
     Create a new pharmacy profile.
 
     New pharmacies start in PENDING verification state.
+
+    The authenticated creator becomes the pharmacy OWNER (a row in
+    pharmacy_staff). Ownership is therefore a server-side fact, not
+    something the client can claim in a header.
     """
 
     now = _utc_now()
@@ -63,11 +75,21 @@ def create_pharmacy(data: PharmacyCreate) -> dict:
 
         "verification_status": VerificationStatus.PENDING.value,
 
+        "owner_user_id": str(owner_user_id),
+
         "created_at": now,
         "updated_at": now,
     }
 
     pharmacies_collection.insert_one(document)
+
+    grant_membership(
+        user_id=owner_user_id,
+        pharmacy_id=pharmacy_id,
+        staff_role="owner",
+        branch_ids=None,
+        granted_by=owner_user_id,
+    )
 
     return _serialize_document(document)
 
@@ -237,6 +259,15 @@ def submit_verification(pharmacy_id: str) -> dict:
 
     if pharmacy is None:
         raise ValueError("Pharmacy not found")
+
+    # One open request at a time (prevents unbounded duplicate submissions).
+    if verification_collection.find_one(
+        {
+            "pharmacy_id": pharmacy_id,
+            "status": VerificationStatus.PENDING.value,
+        }
+    ):
+        raise VerificationAlreadyPending()
 
     now = _utc_now()
 

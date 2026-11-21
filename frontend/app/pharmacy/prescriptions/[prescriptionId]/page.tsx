@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 
 import {
-  DEMO_BRANCH_ID,
+  AUTO_BRANCH,
   getPharmacyPrescription,
   reviewPrescription,
   type PrescriptionResponse,
@@ -68,7 +68,7 @@ export default function PharmacyPrescriptionReviewPage() {
         const data =
           await getPharmacyPrescription(
             prescriptionId,
-            DEMO_BRANCH_ID,
+            AUTO_BRANCH,
           );
 
         if (!active) {
@@ -160,7 +160,7 @@ export default function PharmacyPrescriptionReviewPage() {
       const updated =
         await reviewPrescription(
           prescriptionId,
-          DEMO_BRANCH_ID,
+          AUTO_BRANCH,
           {
             decision: "approve",
             reviewed_items: reviewedItems,
@@ -196,7 +196,7 @@ export default function PharmacyPrescriptionReviewPage() {
       const updated =
         await reviewPrescription(
           prescriptionId,
-          DEMO_BRANCH_ID,
+          AUTO_BRANCH,
           {
             decision: "reject",
             reviewed_items: [],

@@ -179,4 +179,5 @@ __pycache__/
 *.pyc
 *.zip
 # Private prescription uploads
-backend/private_uploads/
+backend/private_uploads/.venv-p3/
+.venv-p3/

@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 
 import {
-  DEMO_BRANCH_ID,
+  AUTO_BRANCH,
   getPharmacyPrescriptionQueue,
   type PrescriptionResponse,
 } from "@/lib/api/prescriptions";
@@ -39,7 +39,7 @@ export default function PharmacyPrescriptionQueuePage() {
     try {
       const queue =
         await getPharmacyPrescriptionQueue(
-          DEMO_BRANCH_ID,
+          AUTO_BRANCH,
         );
 
       setPrescriptions(queue);
@@ -130,7 +130,7 @@ export default function PharmacyPrescriptionQueuePage() {
 
           <SummaryCard
             label="Branch"
-            value={DEMO_BRANCH_ID}
+            value="Your branch"
             small
           />
 

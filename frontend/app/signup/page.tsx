@@ -61,7 +61,12 @@ export default function SignupPage() {
 
       toast({
         title: response.ok ? "Signup Successful" : "Signup Failed",
-        description: data.message || data.detail || "Unknown response",
+        description:
+          data.message ||
+          (Array.isArray(data.detail)
+            ? data.detail.map((e: any) => e?.msg ?? "Invalid input").join("\n")
+            : data.detail) ||
+          "Unknown response",
         variant: response.ok ? "default" : "destructive",
       })
 

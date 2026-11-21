@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 
 from schemas.inventory import (
     InventoryCreate,
@@ -13,6 +13,10 @@ from schemas.inventory import (
     InventoryResponse,
     StockMovementResponse,
 )
+
+from security import audit_events as audit
+from security.authorization import BranchContext, branch_permission
+from security.rate_limit import rate_limit
 
 from services.inventory_service import (
     add_manual_stock,
@@ -35,44 +39,43 @@ router = APIRouter(
 
 
 # =========================================================
-# TEMPORARY DEVELOPMENT SCOPE
-# Person 5 must replace this with authenticated
-# server-side pharmacy / branch scope.
-# The frontend must NOT be trusted to choose its own branch.
+# TRUSTED BRANCH + ACTOR
+#
+# Replaces the old X-Branch-ID / X-Actor-ID header dependencies.
+#
+#   read_ctx  = pharmacy staff allowed to see stock at the branch
+#   write_ctx = owner or inventory manager of THAT branch
+#
+# ctx.user_id    : verified user  -> written to stock_movements.actor
+# ctx.branch_id  : checked against the pharmacy_staff table
+#
+# X-Actor-ID is not read anywhere any more. X-Branch-ID is only a
+# *selector* among branches the caller already has access to.
 # =========================================================
 
-def get_branch_scope(
-    x_branch_id: str = Header(..., alias="X-Branch-ID"),
-) -> str:
-    branch_id = x_branch_id.strip()
+read_ctx = branch_permission("inventory.read")
+write_ctx = branch_permission("inventory.write")
 
-    if not branch_id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Branch ID is required.",
-        )
-
-    return branch_id
+_write_limit = rate_limit("inventory_write", "admin_write_per_minute", 60)
 
 
-# =========================================================
-# TEMPORARY DEVELOPMENT ACTOR
-# Person 5 must replace this with the authenticated
-# server-side user ID from the JWT / current user.
-# =========================================================
+def _completed(operation: str, **details) -> None:
+    """Business-level audit event: a stock-changing operation succeeded."""
+    audit.emit(
+        "inventory.write.completed", outcome="success", resource_type="inventory",
+        target_relation="own_branch", authorization_result="allowed",
+        rule_id=audit.RULE_INV_OPS, details={"operation": operation, **details},
+    )
 
-def get_actor_scope(
-    x_actor_id: str = Header(..., alias="X-Actor-ID"),
-) -> str:
-    actor = x_actor_id.strip()
 
-    if not actor:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Actor ID is required.",
-        )
-
-    return actor
+def _rejected(reason: str, *, denied: bool = False) -> None:
+    audit.emit(
+        "inventory.write.rejected", outcome="denied" if denied else "rejected",
+        resource_type="inventory", rule_id=audit.RULE_INV_BRANCH if denied else audit.RULE_INV_OPS,
+        authorization_result="denied" if denied else None,
+        target_relation="other_branch" if denied else None,
+        details={"reason": reason},
+    )
 
 
 # =========================================================
@@ -86,22 +89,26 @@ def get_actor_scope(
 )
 def create_inventory(
     data: InventoryCreate,
-    branch_id: str = Depends(get_branch_scope),
-    actor: str = Depends(get_actor_scope),
+    ctx: BranchContext = Depends(write_ctx),
+    _rl: None = Depends(_write_limit),
 ):
-    if data.branch_id != branch_id:
+    if data.branch_id != ctx.branch_id:
+        _rejected("foreign_branch", denied=True)
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Cannot create inventory for another branch.",
         )
 
     try:
-        return create_inventory_item(
+        created = create_inventory_item(
             data,
-            actor,
+            ctx.user_id,
         )
+        _completed("create")
+        return created
 
     except ValueError as exc:
+        _rejected("duplicate_item")
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=str(exc),
@@ -113,10 +120,10 @@ def create_inventory(
     response_model=list[InventoryResponse],
 )
 def get_inventory(
-    branch_id: str = Depends(get_branch_scope),
+    ctx: BranchContext = Depends(read_ctx),
 ):
     return list_inventory(
-        branch_id
+        ctx.branch_id
     )
 
 
@@ -134,14 +141,14 @@ def get_inventory(
     response_model=InventoryDashboardResponse,
 )
 def inventory_dashboard(
-    branch_id: str = Depends(get_branch_scope),
+    ctx: BranchContext = Depends(read_ctx),
 ):
     """
-    Return inventory dashboard data for the current branch.
+    Return inventory dashboard data for the caller's branch.
     """
 
     return get_inventory_dashboard(
-        branch_id=branch_id,
+        branch_id=ctx.branch_id,
     )
 
 
@@ -155,18 +162,20 @@ def inventory_dashboard(
 )
 def manual_stock_intake(
     payload: InventoryIntakeRow,
-    branch_id: str = Depends(get_branch_scope),
-    actor: str = Depends(get_actor_scope),
+    ctx: BranchContext = Depends(write_ctx),
+    _rl: None = Depends(_write_limit),
 ):
     """
     Manually add stock to one product.
     """
 
-    return add_manual_stock(
+    result = add_manual_stock(
         row=payload,
-        branch_id=branch_id,
-        actor=actor,
+        branch_id=ctx.branch_id,
+        actor=ctx.user_id,
     )
+    _completed("manual_intake")
+    return result
 
 
 # =========================================================
@@ -179,13 +188,15 @@ def manual_stock_intake(
 )
 def validate_csv_intake(
     payload: InventoryCsvValidationRequest,
-    branch_id: str = Depends(get_branch_scope),
+    ctx: BranchContext = Depends(write_ctx),
+    _rl: None = Depends(_write_limit),
 ):
     """
     Validate CSV inventory intake data.
 
-    Validation only:
-    nothing is written to MongoDB.
+    Validation only: nothing is written to MongoDB.
+    (Requires write permission because it is the first step of a write flow
+    and it parses attacker-sized text.)
     """
 
     try:
@@ -194,6 +205,7 @@ def validate_csv_intake(
         )
 
     except ValueError as exc:
+        _rejected("invalid_csv")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(exc),
@@ -210,8 +222,8 @@ def validate_csv_intake(
 )
 def confirm_inventory_import(
     payload: InventoryImportRequest,
-    branch_id: str = Depends(get_branch_scope),
-    actor: str = Depends(get_actor_scope),
+    ctx: BranchContext = Depends(write_ctx),
+    _rl: None = Depends(_write_limit),
 ):
     """
     Import rows only after the frontend has shown
@@ -224,11 +236,13 @@ def confirm_inventory_import(
             detail="At least one inventory row is required.",
         )
 
-    return import_inventory_rows(
+    result = import_inventory_rows(
         rows=payload.rows,
-        branch_id=branch_id,
-        actor=actor,
+        branch_id=ctx.branch_id,
+        actor=ctx.user_id,
     )
+    _completed("import", row_count=len(payload.rows))
+    return result
 
 
 # =========================================================
@@ -243,11 +257,11 @@ def confirm_inventory_import(
 )
 def get_inventory_by_id(
     inventory_id: str,
-    branch_id: str = Depends(get_branch_scope),
+    ctx: BranchContext = Depends(read_ctx),
 ):
     item = get_inventory_item(
         inventory_id,
-        branch_id,
+        ctx.branch_id,
     )
 
     if item is None:
@@ -266,18 +280,19 @@ def get_inventory_by_id(
 def change_inventory_quantity(
     inventory_id: str,
     data: InventoryQuantityUpdate,
-    branch_id: str = Depends(get_branch_scope),
-    actor: str = Depends(get_actor_scope),
+    ctx: BranchContext = Depends(write_ctx),
+    _rl: None = Depends(_write_limit),
 ):
     try:
         item = update_quantity(
             inventory_id,
-            branch_id,
+            ctx.branch_id,
             data.physical_quantity,
-            actor,
+            ctx.user_id,
         )
 
     except ValueError as exc:
+        _rejected("invalid_quantity")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(exc),
@@ -289,6 +304,7 @@ def change_inventory_quantity(
             detail="Inventory item not found.",
         )
 
+    _completed("quantity_update")
     return item
 
 
@@ -299,11 +315,12 @@ def change_inventory_quantity(
 def change_inventory_details(
     inventory_id: str,
     data: InventoryDetailsUpdate,
-    branch_id: str = Depends(get_branch_scope),
+    ctx: BranchContext = Depends(write_ctx),
+    _rl: None = Depends(_write_limit),
 ):
     item = update_inventory_details(
         inventory_id,
-        branch_id,
+        ctx.branch_id,
         data,
     )
 
@@ -313,6 +330,7 @@ def change_inventory_details(
             detail="Inventory item not found.",
         )
 
+    _completed("details_update")
     return item
 
 
@@ -322,11 +340,11 @@ def change_inventory_details(
 )
 def get_inventory_movements(
     inventory_id: str,
-    branch_id: str = Depends(get_branch_scope),
+    ctx: BranchContext = Depends(read_ctx),
 ):
     item = get_inventory_item(
         inventory_id,
-        branch_id,
+        ctx.branch_id,
     )
 
     if item is None:
@@ -337,5 +355,5 @@ def get_inventory_movements(
 
     return list_stock_movements(
         inventory_id,
-        branch_id,
+        ctx.branch_id,
     )

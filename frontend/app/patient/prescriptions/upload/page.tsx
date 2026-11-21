@@ -1,6 +1,6 @@
 "use client";
 import Link from "next/link";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type {
   ChangeEvent,
   FormEvent,
@@ -15,9 +15,10 @@ import {
 } from "lucide-react";
 
 import {
-  DEMO_BRANCH_ID,
+  listPublicBranches,
   uploadPrescription,
   type PrescriptionResponse,
+  type PublicBranch,
 } from "@/lib/api/prescriptions";
 
 
@@ -36,6 +37,26 @@ export default function PrescriptionUploadPage() {
 
   const inputRef =
     useRef<HTMLInputElement | null>(null);
+
+  // The patient chooses which approved pharmacy branch receives the prescription.
+  const [branches, setBranches] =
+    useState<PublicBranch[]>([]);
+
+  const [branchId, setBranchId] =
+    useState("");
+
+  useEffect(() => {
+    listPublicBranches()
+      .then((list) => {
+        setBranches(list);
+        if (list.length === 1) {
+          setBranchId(list[0].branch_id);
+        }
+      })
+      .catch(() =>
+        setError("Pharmacy branches could not be loaded."),
+      );
+  }, []);
 
 
   function handleFileChange(
@@ -73,6 +94,11 @@ export default function PrescriptionUploadPage() {
       return;
     }
 
+    if (!branchId) {
+      setError("Please choose a pharmacy branch.");
+      return;
+    }
+
     setIsUploading(true);
     setError(null);
     setResult(null);
@@ -81,7 +107,7 @@ export default function PrescriptionUploadPage() {
       const prescription =
         await uploadPrescription(
           selectedFile,
-          DEMO_BRANCH_ID,
+          branchId,
         );
 
       setResult(prescription);
@@ -211,6 +237,31 @@ export default function PrescriptionUploadPage() {
               )}
 
 
+              <div>
+                <label
+                  htmlFor="branch"
+                  className="mb-1 block text-sm font-semibold text-secondary"
+                >
+                  Pharmacy branch
+                </label>
+
+                <select
+                  id="branch"
+                  value={branchId}
+                  onChange={(e) => setBranchId(e.target.value)}
+                  className="w-full rounded-xl border bg-background px-3 py-2.5 text-sm"
+                  required
+                >
+                  <option value="">Select a branch…</option>
+                  {branches.map((b) => (
+                    <option key={b.branch_id} value={b.branch_id}>
+                      {b.pharmacy_name} — {b.branch_name} ({b.address})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+
               {error && (
                 <div
                   role="alert"
@@ -225,6 +276,7 @@ export default function PrescriptionUploadPage() {
                 type="submit"
                 disabled={
                   !selectedFile ||
+                  !branchId ||
                   isUploading
                 }
                 className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-5 py-3 font-semibold text-white transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"

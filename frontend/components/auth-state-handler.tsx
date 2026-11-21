@@ -3,15 +3,19 @@
 import { useEffect, useState } from 'react'
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
+import { getCachedUser } from "@/lib/auth-client"
 
 export function AuthStateHandler() {
   const [isLoggedIn, setIsLoggedIn] = useState(false)
   const [isClient, setIsClient] = useState(false)
+  const [isAdmin, setIsAdmin] = useState(false)
 
   useEffect(() => {
     setIsClient(true)
     const loggedIn = localStorage.getItem('isLoggedIn') === 'true'
     setIsLoggedIn(loggedIn)
+    // Navigation only: the /admin layout re-checks the role with the server.
+    setIsAdmin(loggedIn && getCachedUser()?.role === "admin")
   }, [])
 
   if (!isClient) {
@@ -49,6 +53,13 @@ export function AuthStateHandler() {
             Dashboard
           </Button>
         </Link>
+        {isAdmin && (
+          <Link href="/admin">
+            <Button size="sm" className="bg-primary text-white hover:bg-primary/90">
+              Admin
+            </Button>
+          </Link>
+        )}
       </div>
     )
   }

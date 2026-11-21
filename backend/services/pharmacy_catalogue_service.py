@@ -1,4 +1,4 @@
-﻿import os
+import os
 import re
 import logging
 import threading
@@ -112,6 +112,26 @@ def upstream_get(endpoint, params=None):
     return data
 
 
+def _safe_upstream_document(item):
+    """
+    Copy an upstream record, dropping keys MongoDB would interpret instead of store.
+
+    A key starting with "$" is an update operator and a key containing "." is a field
+    path, so a compromised or buggy upstream could otherwise overwrite fields of OTHER
+    listings' structure or inject operators into the $set below. Nested dicts are
+    cleaned recursively. (Added during the merge with the Grad 2 security work.)
+    """
+    if isinstance(item, dict):
+        return {
+            k: _safe_upstream_document(v)
+            for k, v in item.items()
+            if isinstance(k, str) and k and not k.startswith("$") and "." not in k and "\x00" not in k
+        }
+    if isinstance(item, list):
+        return [_safe_upstream_document(v) for v in item]
+    return item
+
+
 def serialize_listing(document):
     if document is None:
         return None
@@ -222,7 +242,7 @@ def _import_worker():
                 if listing_id is None or not pharmacy_id:
                     continue
 
-                document = dict(item)
+                document = _safe_upstream_document(item)
 
                 document["_id"] = (
                     f"{pharmacy_id}:{listing_id}"
