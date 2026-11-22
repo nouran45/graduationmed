@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Runs the backend tests before every push. A failing test cancels the push.
+set -e
+repo=$(git rev-parse --show-toplevel)
+cd "$repo/backend"
+[ -f "$repo/.venv-p3/bin/activate" ] && source "$repo/.venv-p3/bin/activate"
+echo "pre-push: running backend tests..."
+python -m pytest -q
