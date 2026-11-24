@@ -89,7 +89,7 @@ function normalizeProducts(payload: unknown): Product[] {
     }
 
     return items
-        .map((item, index) => {
+        .map((item, index): Product | null => {
             if (!item || typeof item !== "object") return null
 
             const product = item as Record<string, unknown>

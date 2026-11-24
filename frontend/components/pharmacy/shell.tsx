@@ -1,5 +1,5 @@
 import Link from "next/link"
-import { ChevronRight, ShieldCheck } from "lucide-react"
+import { ChevronRight, ShieldCheck, ShoppingCart } from "lucide-react"
 import { SearchBox } from "./search-box"
 
 export function PharmacyShell({ children, hideSearch = false }: { children: React.ReactNode; hideSearch?: boolean }) {
@@ -16,6 +16,14 @@ export function PharmacyShell({ children, hideSearch = false }: { children: Reac
                         <Link href="/pharmacy#categories" className="hover:text-secondary">Categories</Link>
                         <Link href="/pharmacy#deals" className="hover:text-secondary">Offers</Link>
                         <Link href="/pharmacy#pharmacies" className="hover:text-secondary">Pharmacies</Link>
+                        <Link
+                            href="/pharmacy/cart"
+                            className="inline-flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1.5
+                                    hover:text-secondary focus-visible:outline focus-visible:outline-2"
+                        >
+                            <ShoppingCart className="h-4 w-4" aria-hidden="true" />
+                            <span>Cart</span>
+                        </Link>
                         <Link href="/" className="hidden hover:text-secondary sm:block">ShifAI</Link>
                     </nav>
                 </div>

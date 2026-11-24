@@ -89,7 +89,7 @@ def get_upstream_config():
     return base_url, token
 
 
-def upstream_get(endpoint, params=None):
+def upstream_get(endpoint, params=None, *, timeout=60):
     base_url, token = get_upstream_config()
 
     response = requests.get(
@@ -99,7 +99,7 @@ def upstream_get(endpoint, params=None):
             "X-MediCheck-Token": token,
         },
         params=params,
-        timeout=60,
+        timeout=timeout,
     )
 
     response.raise_for_status()

@@ -1,6 +1,6 @@
 ﻿"use client"
 
-import { Suspense, useMemo } from "react"
+import { Suspense, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { useParams, useSearchParams } from "next/navigation"
 import { Clock3, Snowflake, Store, Tag } from "lucide-react"
@@ -11,6 +11,9 @@ import { fetchProduct, fetchProducts } from "@/lib/pharmacy/api"
 import { useAsync } from "@/lib/pharmacy/hooks"
 import { formatEGP, groupProducts, productKey, safeDecode, STATUS_STYLES, timeAgo } from "@/lib/pharmacy/marketplace"
 import type { Availability, Offer } from "@/lib/pharmacy/types"
+
+
+import { getCart, setCartQuantity } from "@/lib/pharmacy/cart"
 
 const STATUS_DETAIL: Record<Availability, string> = {
     in_stock: "Stock confirmed by the pharmacy.",
@@ -23,6 +26,40 @@ const STATUS_LABEL: Record<Availability, string> = {
 }
 
 function Details() {
+    const adding = useRef(false)
+    const [cartBusy, setCartBusy] = useState(false)
+    const [cartMessage, setCartMessage] = useState("")
+    const [cartError, setCartError] = useState("")
+
+    async function addOffer(offer: Offer) {
+        if (adding.current) return
+        adding.current = true
+        setCartBusy(true)
+        setCartMessage("")
+        setCartError("")
+
+        try {
+            const cart = await getCart()
+            const line = cart.lines.find(
+                (item) => item.pharmacy_id === offer.pharmacyId && item.product_id === offer.productId
+            )
+            const quantity = (line?.quantity ?? 0) + 1
+            if (quantity > 99) {
+                setCartError("This offer is already at the cart quantity limit.")
+                return
+            }
+            await setCartQuantity(cart, offer.pharmacyId, offer.productId, quantity)
+            setCartMessage("Added to your cart.")
+        } catch (err) {
+            setCartError(err instanceof Error ? err.message : "Could not add this offer.")
+        } finally {
+            adding.current = false
+            setCartBusy(false)
+        }
+    }
+
+
+
     const params = useParams<{ id: string }>()
     const id = safeDecode(String(params.id ?? ""))
     const pharmacyId = useSearchParams().get("pharmacy_id") ?? undefined
@@ -129,11 +166,26 @@ function Details() {
                                             {cheapest && <span className="mb-1 inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700"><Tag className="h-3 w-3" />Best price</span>}
                                             <p className="text-lg font-bold">{formatEGP(o.price) ? `${formatEGP(o.price)} EGP` : <span className="text-sm text-gray-400">Price unavailable</span>}</p>
                                             {formatEGP(o.oldPrice) && <p className="text-[11px] text-gray-400 line-through">{formatEGP(o.oldPrice)} EGP</p>}
+                                            <button
+                                                type="button"
+                                                className="mt-2 rounded-lg border px-3 py-1 text-sm font-semibold disabled:opacity-50"
+                                                disabled={cartBusy || !o.pharmacyId || !/^[0-9]{1,32}$/.test(o.productId) || o.price == null || o.price <= 0}
+                                                onClick={() => void addOffer(o)}
+                                            >
+                                                Add to cart
+                                            </button>
                                         </div>
                                     </li>
                                 )
                             })}
                         </ul>
+                        <div className="mt-3 space-y-1">
+                            {cartMessage && <p role="status">{cartMessage}</p>}
+                            {cartError && <p role="alert" className="text-red-700">{cartError}</p>}
+                            <Link href="/pharmacy/cart" className="text-sm font-semibold underline">
+                                View cart
+                            </Link>
+                        </div>
                         <p className="mt-3 text-[11px] leading-5 text-gray-400">Ordering and delivery depend on each pharmacy. Prices and stock reflect the latest synchronisation.</p>
                     </section>
 
@@ -153,6 +205,7 @@ function Details() {
         </div>
     )
 }
+
 
 export default function ProductDetailsPage() {
     return (

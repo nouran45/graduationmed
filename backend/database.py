@@ -40,10 +40,12 @@ verification_collection = db["verification"]
 prescriptions_collection = db["prescriptions"]
 
 
+
 # Person 4 collections
 inventory_collection = db["inventory"]
 stock_movements_collection = db["stock_movements"]
 orders_collection = db["orders"]
+carts_collection = db["carts"]
 
 
 # ---- Grad 2 / Phase 1 collections ---------------------------------------
