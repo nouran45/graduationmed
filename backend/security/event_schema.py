@@ -175,6 +175,8 @@ _STATIC: dict[str, RouteInfo] = {
     # admin user / role management
     "/api/admin/users": RouteInfo("admin_user_create", "admin", "high", "account"),
     "/api/admin/pharmacies": RouteInfo("admin_pharmacy_directory", "admin", "medium", "pharmacy"),
+    "/api/cart": RouteInfo("cart_read", "pharmacy", "medium", "cart"),
+    "/api/cart/items": RouteInfo("cart_update", "pharmacy", "medium", "cart"),
     # public pharmacy catalogue (read-only product data imported from PharmaSync)
     "/api/catalogue/products": RouteInfo("catalogue_search", "pharmacy", "low", "catalogue"),
     "/api/catalogue/categories": RouteInfo("catalogue_categories", "pharmacy", "low", "catalogue"),

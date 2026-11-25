@@ -36,6 +36,7 @@ from routers.pharmacies import router as pharmacies_router
 from routers.pharmacy_catalogue import router as pharmacy_catalogue_router
 from routers.prescriptions import router as prescriptions_router
 from routers.security_events import router as security_events_router
+from routers.cart import router as cart_router
 
 # ── Models ──────────────────────────────────────────────────────────────────
 from models import (
@@ -118,6 +119,7 @@ app.include_router(inventory_router)    # now authenticated; safe to register
 app.include_router(security_events_router)   # admin-only READ access to security events (Phase 2)
 app.include_router(pharmacy_catalogue_router)  # public product catalogue (teammate); admin-only sync
 app.include_router(admin_users_router)          # admin: create users with a role, change roles
+app.include_router(cart_router)                 # customer cart management
 
 _predict_limit = rate_limit("predict", "predict_per_minute", 60)
 _heavy_limit = rate_limit("predict_heavy", "heavy_predict_per_minute", 60)
